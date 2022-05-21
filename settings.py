@@ -3,8 +3,6 @@ import win32con
 import win32api
 import datetime
 
-# 占位符,用于列簇层级结构
-placeholder = None
 
 # 表格生成后是否打开, True表示'是',False表示'否'
 SHOW_DOC_AFTER_GENERATED = True
@@ -12,7 +10,10 @@ SHOW_DOC_AFTER_GENERATED = True
 VIP_SALES_INTERVAL = 7
 # 猫超销量的天数,1~30
 MC_SALES_INTERVAL = 7
-
+# 占位符,用于列簇层级结构
+placeholder = None
+# ---------------------文件夹路径(填写在引号内)-------------------------
+DOCS_PATH = r'C:\Users\Administrator\Desktop\唯品新工具开发相关资料'
 # 库存显示方面的设置
 warehouses = ['HanChuan', 'ChengDong', 'LingDing', 'YueZhong', 'LinDa', 'PiFa', 'KunShan', 'adjustment']
 warehouses_key_name = ['汉川', '城东', '岭顶', '越中', '琳达', '批发', '昆山', '修正']
@@ -78,8 +79,7 @@ FEATURE_PRIORITY.update(DAILY_SALES_WEEK)
 WAREHOUSE_PRIORITY_REAL_VIRTUAL = (
     {warehouses[i] + '_virtual': [WAREHOUSE_PRIORITY[warehouses[i]][0] + 1, WAREHOUSE_PRIORITY[warehouses[i]][1]],
      warehouses[i]: [WAREHOUSE_PRIORITY[warehouses[i]][0] + 2, WAREHOUSE_PRIORITY[warehouses[i]][1]],
-     }
-    for i in range(0, 8)
+     } for i in range(0, 8)
 )
 
 for i in range(0, 8):
@@ -110,22 +110,19 @@ COLUMN_PROPERTY = [
 vip_daily_sales_columns = [
     {'identity': daily_sales_week_title[i], 'name': daily_sales_week_title[i],
      'refer_doc': 'vip_daily_sales', 'floating_title': daily_sales_week_title[i]
-     }
-    for i in range(0, VIP_SALES_INTERVAL)
+     } for i in range(0, VIP_SALES_INTERVAL)
 ]
 
 warehouses_stock = [
     {'identity': warehouses[i], 'name': warehouses_key_name[i] + '仓库存',
      'refer_doc': warehouses[i].lower() + '_stock', 'floating_title': ['可发库存', '可用库存']
-     }
-    for i in range(0, 8)
+     } for i in range(0, 8)
 ]
 
 warehouses_stock_virtual = [
     {'identity': warehouses[i] + '_virtual', 'name': warehouses_key_name[i] + '虚拟仓库存',
      'refer_doc': warehouses[i].lower() + '_stock_virtual', 'floating_title': ['可发库存', '可用库存']
-     }
-    for i in range(0, 8)
+     } for i in range(0, 8)
 ]
 
 COLUMN_PROPERTY.extend(warehouses_stock)
@@ -136,8 +133,7 @@ doc_stock = [
     {'identity': warehouses[i].lower() + '_stock',
      'key_words': '^[^虚拟].*' + warehouses_key_re[i] + '[^虚拟].*$', 'key_pos': ['商家编码', ], 'val_pos': ['可发库存', '可用库存'],
      'val_type': ['int', 'int']
-     }
-    for i in range(0, 8)
+     } for i in range(0, 8)
 ]
 
 doc_stock_virtual = [
@@ -145,11 +141,10 @@ doc_stock_virtual = [
      'key_words': warehouses_key_re[i] + '.*虚拟|虚拟.*' + warehouses_key_re[i],
      'key_pos': ['商家编码', ], 'val_pos': ['可发库存', '可用库存'],
      'val_type': ['int', 'int']
-     }
-    for i in range(0, 8)
+     } for i in range(0, 8)
 ]
 
-DOC_REFERENCE = [
+DOC_REFERENCES = [
     {'identity': 'vip_routine_site_stock',  # 页面库存文件
      'key_words': '常态可扣减|剩余可售库存', 'key_pos': ['条码', ], 'val_pos': ['可扣库存', ], 'val_type': ['int', ]},
 
@@ -185,8 +180,8 @@ DOC_REFERENCE = [
      'val_type': ['str', 'str', 'str', 'str', 'float', 'float', 'float', 'float', ]},
 ]
 
-DOC_REFERENCE.extend(doc_stock)
-DOC_REFERENCE.extend(doc_stock_virtual)
+DOC_REFERENCES.extend(doc_stock)
+DOC_REFERENCES.extend(doc_stock_virtual)
 
 
 # 获取桌面路径
