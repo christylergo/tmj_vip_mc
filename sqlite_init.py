@@ -3,6 +3,7 @@ import sqlite3
 
 import settings as st
 
+sql_db = 'tmj_sqlite.db'
 sql_create_tmj_files_info = '''
     CREATE TABLE IF NOT EXISTS tmj_files_info
     (ID INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
@@ -21,7 +22,7 @@ sql_create_table.append(sql_create_tmj_files_info)
 table_list = [item['identity'] for item in st.DOC_REFERENCE]
 table_list.append('tmj_files_info')
 
-conn = sqlite3.connect('tmj_sqlite.db')
+conn = sqlite3.connect(sql_db)
 cur = conn.cursor()
 for create_table in sql_create_table:
     cur.execute(create_table)
