@@ -28,7 +28,6 @@ class DocumentIO(threading.Thread):
     ]
     sql_db = sqlite_init.sql_db
     files = None
-    file = None
     mutex = threading.Lock()
     queue = multiprocessing.Queue()
 
@@ -57,15 +56,15 @@ class DocumentIO(threading.Thread):
                 elif doc['importance'] == 'caution':
                     print(f"缺少数据表格: {doc['identity']}\n")
                 else:
-                    pass
+                    pass  # optional文件不存在时不需要提醒
             for file in cls.files:
                 matched = re.search(doc['key_words'], file['file_name'])
                 if matched is not None:
                     file['identity'] = doc['identity']
-        conn = sqlite.connect(cls.sql_db)
         cls.mutex.aquaire()
+        conn = sqlite.connect(cls.sql_db)
         cursor = conn.cursor()
-        cursor_data = cursor.execute("SELECT id, identity, file_name, file_mtime FROM tmj_files_info;")
+        cursor_data = cursor.execute("SELECT identity, file_name, file_mtime FROM tmj_files_info;")
         # print(files_list)
         for row in cursor_data:  # 把查询到的sqlite中的文件更新时间放入files_list中,后续对比会用到
             for file in cls.files:
@@ -90,54 +89,63 @@ class DocumentIO(threading.Thread):
         self.check_file()
 
     def check_file(self):
+        file_name = []
         for file in self.files:
             if file['identity'] == self.identity:
-                self.file = file['file_name']
+                file_name.append(file['file_name'])
                 if file['file_mtime'] == file['file_mtime_in_sqlite']:
                     self.from_sql = 'substitute'
+        if len(file_name) > 0:
+            self.file = file_name
         for doc in DocumentIO.sql_mark:
             if self.identity == doc['identity']:
                 self.from_sql = doc['mode']
 
     def read_doc(self) -> pd.DataFrame:
-        matched_csv = re.match(r'^.*\.csv$', self.file)
-        matched_excel = re.match(r'^.*\.xlsx?$', self.file)
-        pd_cols = self.doc_ref['key_pos'].extend(self.doc_ref['val_pos'])
         doc_df = pd.DataFrame()
-        if matched_csv:
-            doc_df = pd.read_csv(
-                self.file, index_col=self.doc_ref['key_pos'], usecols=lambda col: col in pd_cols)
-        if matched_excel:
-            doc_df = pd.read_excel(
-                self.file, index_col=self.doc_ref['key_pos'], use_cols=lambda col: col in pd_cols)
+        for file in self.file:
+            matched_csv = re.match(r'^.*\.csv$', file)
+            matched_excel = re.match(r'^.*\.xlsx?$', file)
+            pd_cols = self.doc_ref['key_pos'].extend(self.doc_ref['val_pos'])
+            if matched_csv:
+                df = pd.read_csv(file, usecols=lambda col: col in pd_cols)
+                doc_df = pd.concat([doc_df, df], axis=0)
+            if matched_excel:
+                df = pd.read_excel(file, usecols=lambda col: col in pd_cols)  # 在read_excel中使用index_col=[]报错,不知道原因
+                doc_df = pd.concat([doc_df, df], axis=0)
         return doc_df
 
     def read_sqlite(self) -> pd.DataFrame:
         pd_cols = self.doc_ref['key_pos'].extend(self.doc_ref['val_pos'])
         sql_constraint = ''
         if self.from_sql == 'merge':
-            vip_sales_date_head = datetime.date.today() - datetime.timedelta(days=st.VIP_SALES_INTERVAL)
-            sql_constraint = f' WHERE 日期 >= {vip_sales_date_head}'
+            sales_date_head = datetime.datetime.today() - datetime.timedelta(days=st.VIP_SALES_INTERVAL)
+            sql_constraint = f' WHERE 日期 >= {sales_date_head}'
         self.mutex.aquaire()
         conn = sqlite.connect(self.sql_db)
-        sql_cursor = conn.cursor()
-        sql_cursor = sql_cursor.execute(f"SELECT {str.join(',', pd_cols)}, FROM {self.identity}{sql_constraint}")
+        # sql_cursor = conn.cursor()
+        sql_query = f"SELECT {str.join(',', pd_cols)}, FROM {self.identity}{sql_constraint}"
+        sql_df = pd.read_sql_query(sql_query, con=conn, index_col=self.doc_ref['key_pos'])
         conn.close()
         self.mutex.release()
-        return pd.DataFrame()
+        return sql_df
 
     def get_data(self):
         if self.from_sql == 'merge':
-            self.read_sqlite()
-            self.read_sqlite()
+            doc_df = self.read_doc()
+            sql_df = self.read_sqlite()
+            if not doc_df.empty:
+                doc_df.assign(newdate=lambda x: pd.to_datetime(x['日期']))
+            if not sql_df.empty:
+                sql_df.assign(newdate=lambda x: pd.to_datetime(x['日期']))
         elif self.from_sql == 'substitute':
-            pass
+            self.read_sqlite()
 
         pass
 
     def to_sqlite(self):
         self.mutex.aquaire()
-        conn = sqlite.connect('tmj_sqlite.db')
+        conn = sqlite.connect(self.sql_db)
         cursor = conn.cursor()
         pass
         '''
