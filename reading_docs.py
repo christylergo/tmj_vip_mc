@@ -32,7 +32,7 @@ class DocumentIO(threading.Thread):
     queue = multiprocessing.Queue()
 
     @classmethod
-    def get_files_list(cls):
+    def get_files_list(cls) -> None:
         files = Path(st.DOCS_PATH)
         files_list = [{
             'identity': None,
@@ -61,7 +61,7 @@ class DocumentIO(threading.Thread):
                 matched = re.search(doc['key_words'], file['file_name'])
                 if matched is not None:
                     file['identity'] = doc['identity']
-        cls.mutex.aquaire()
+        cls.mutex.acquire()
         conn = sqlite.connect(cls.sql_db)
         cursor = conn.cursor()
         cursor_data = cursor.execute("SELECT identity, file_name, file_mtime FROM tmj_files_info;")
@@ -82,15 +82,13 @@ class DocumentIO(threading.Thread):
         self.doc_ref = doc_reference
         self.file = None
         self.from_sql = None
-        self.queue = self.queue
-        self.mutex = self.mutex
-        if DocumentIO.files is None:
-            self.files = DocumentIO.check_files_list()
+        if self.files is None:  # 类属性
+            self.files = self.check_files_list()
         self.check_file()
 
-    def check_file(self):
+    def check_file(self) -> None:
         file_name = []
-        for file in self.files:
+        for file in self.files:  # files是类属性,全部文件夹中的文件信息列表
             if file['identity'] == self.identity:
                 file_name.append(file['file_name'])
                 if file['file_mtime'] == file['file_mtime_in_sqlite']:
@@ -101,50 +99,67 @@ class DocumentIO(threading.Thread):
             if self.identity == doc['identity']:
                 self.from_sql = doc['mode']
 
-    def read_doc(self) -> pd.DataFrame:
+    def read_doc(self) -> pd.DataFrame():
         doc_df = pd.DataFrame()
-        for file in self.file:
+        for file in self.file:  # file是实例属性,将要读取的文件信息,也是列表,因为同一性质文件可能有多个
             matched_csv = re.match(r'^.*\.csv$', file)
             matched_excel = re.match(r'^.*\.xlsx?$', file)
-            pd_cols = self.doc_ref['key_pos'].extend(self.doc_ref['val_pos'])
+            pd_cols = self.doc_ref['key_pos']
+            pd_cols.extend(self.doc_ref['val_pos'])
             if matched_csv:
                 df = pd.read_csv(file, usecols=lambda col: col in pd_cols)
                 doc_df = pd.concat([doc_df, df], axis=0)
             if matched_excel:
-                df = pd.read_excel(file, usecols=lambda col: col in pd_cols)  # 在read_excel中使用index_col=[]报错,不知道原因
+                # 默认引擎是openpyxl,使用xlrd比openpyxl速度更快,但是必须是新版,pip install xlrd==1.2.0
+                df = pd.read_excel(file, engine='xlrd', usecols=lambda col: col in pd_cols)
                 doc_df = pd.concat([doc_df, df], axis=0)
         return doc_df
 
-    def read_sqlite(self) -> pd.DataFrame:
-        pd_cols = self.doc_ref['key_pos'].extend(self.doc_ref['val_pos'])
+    def read_sqlite(self) -> pd.DataFrame():
+        pd_cols = self.doc_ref['key_pos']
+        pd_cols.extend(self.doc_ref['val_pos'])
         sql_constraint = ''
         if self.from_sql == 'merge':
             sales_date_head = datetime.datetime.today() - datetime.timedelta(days=st.VIP_SALES_INTERVAL)
-            sql_constraint = f' WHERE 日期 >= {sales_date_head}'
-        self.mutex.aquaire()
+            sql_constraint = f" WHERE {self.doc_ref['key_pos'][1]} >= '{sales_date_head}'"  # vip和mc日销文件的date列名不同
+        self.mutex.acquire()
         conn = sqlite.connect(self.sql_db)
         # sql_cursor = conn.cursor()
-        sql_query = f"SELECT {str.join(',', pd_cols)}, FROM {self.identity}{sql_constraint}"
-        sql_df = pd.read_sql_query(sql_query, con=conn, index_col=self.doc_ref['key_pos'])
+        sql_query = f"SELECT {str.join(',', pd_cols)} FROM {self.identity}{sql_constraint}"
+        sql_df = pd.read_sql_query(sql_query, con=conn)  # 要实现两个df的concat,两者的index列也要相同
         conn.close()
         self.mutex.release()
         return sql_df
 
-    def get_data(self):
+    def get_data(self) -> pd.DataFrame():
         if self.from_sql == 'merge':
             doc_df = self.read_doc()
             sql_df = self.read_sqlite()
+            sql_date = pd.DataFrame()
+            date_col = self.doc_ref['key_pos'][1]
             if not doc_df.empty:
-                doc_df.assign(newdate=lambda x: pd.to_datetime(x['日期']))
+                doc_df[date_col] = pd.to_datetime(doc_df[date_col])
+                # doc_date = doc_df.drop_duplicates(subset=[date_col], keep='first')[date_col]
             if not sql_df.empty:
-                sql_df.assign(newdate=lambda x: pd.to_datetime(x['日期']))
+                sql_df[date_col] = pd.to_datetime(sql_df[date_col])
+                sql_date = sql_df.drop_duplicates(subset=[date_col], keep='first')[date_col]
+            if not (doc_df.empty or sql_df.empty):
+                mask = [False if x in sql_date else True for x in doc_df[date_col]]
+                merged_df = pd.concat([doc_df[mask], sql_df], keys=['doc_df', 'sql_df'])
+            else:
+                merged_df = pd.concat([doc_df, sql_df], keys=['doc_df', 'sql_df'])
+            return merged_df
         elif self.from_sql == 'substitute':
-            self.read_sqlite()
+            sql_df = self.read_sqlite()
+            return sql_df
+        else:
+            doc_df = self.read_doc()
+            return doc_df
 
         pass
 
     def to_sqlite(self):
-        self.mutex.aquaire()
+        self.mutex.acquire()
         conn = sqlite.connect(self.sql_db)
         cursor = conn.cursor()
         pass
@@ -164,3 +179,15 @@ class DocumentIO(threading.Thread):
             "INSERT INTO tmj_files_info(id, identity, file_name, file_mtime) VALUES(?,?,?,?);", query_data)
         conn.commit()
         conn.close()
+        self.mutex.release()
+
+
+doc_rf = {
+        'identity': 'vip_daily_sales', 'name': '',  # 日销量、商品链接
+        'key_words': '商品明细|条码粒度', 'key_pos': ['条码', '日期', ], 'val_pos': ['销售量', '商品链接', ],
+        'val_type': ['INT', 'TEXT', ],
+        'importance': 'caution'
+    }
+get_raw_data = DocumentIO(doc_rf)
+df = get_raw_data.get_data()
+print(df.head())

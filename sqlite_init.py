@@ -41,5 +41,4 @@ conn.commit()
 conn.close()
 
 
-def tables_have_been_created():
-    print('tables have been created in sqlite, get it done!')
+print('sqlite_init->tracing...')
