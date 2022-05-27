@@ -107,12 +107,12 @@ class DocumentIO(threading.Thread):
             pd_cols = self.doc_ref['key_pos']
             pd_cols.extend(self.doc_ref['val_pos'])
             if matched_csv:
-                df = pd.read_csv(file, usecols=lambda col: col in pd_cols)
-                doc_df = pd.concat([doc_df, df], axis=0)
+                one_df = pd.read_csv(file, usecols=lambda col: col in pd_cols)
+                doc_df = pd.concat([doc_df, one_df], axis=0)
             if matched_excel:
                 # 默认引擎是openpyxl,使用xlrd比openpyxl速度更快,但是必须是新版,pip install xlrd==1.2.0
-                df = pd.read_excel(file, engine='xlrd', usecols=lambda col: col in pd_cols)
-                doc_df = pd.concat([doc_df, df], axis=0)
+                one_df = pd.read_excel(file, engine='xlrd', usecols=lambda col: col in pd_cols)
+                doc_df = pd.concat([doc_df, one_df], axis=0)
         return doc_df
 
     def read_sqlite(self) -> pd.DataFrame():
@@ -146,9 +146,10 @@ class DocumentIO(threading.Thread):
             if not (doc_df.empty or sql_df.empty):
                 mask = [False if x in sql_date else True for x in doc_df[date_col]]
                 merged_df = pd.concat([doc_df[mask], sql_df], keys=['doc_df', 'sql_df'])
+                return merged_df
             else:
-                merged_df = pd.concat([doc_df, sql_df], keys=['doc_df', 'sql_df'])
-            return merged_df
+                valid_df = doc_df if not doc_df.empty else sql_df
+                return valid_df
         elif self.from_sql == 'substitute':
             sql_df = self.read_sqlite()
             return sql_df
@@ -183,11 +184,10 @@ class DocumentIO(threading.Thread):
 
 
 doc_rf = {
-        'identity': 'vip_daily_sales', 'name': '',  # 日销量、商品链接
-        'key_words': '商品明细|条码粒度', 'key_pos': ['条码', '日期', ], 'val_pos': ['销售量', '商品链接', ],
-        'val_type': ['INT', 'TEXT', ],
+        'identity': 'vip_routine_site_stock', 'name': '',  # 页面库存文件
+        'key_words': '常态可扣减|剩余可售库存', 'key_pos': ['条码', ], 'val_pos': ['可扣库存', ], 'val_type': ['INT', ],
         'importance': 'caution'
     }
 get_raw_data = DocumentIO(doc_rf)
 df = get_raw_data.get_data()
-print(df.head())
+print(df)
