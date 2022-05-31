@@ -148,7 +148,7 @@ doc_stock_virtual = [{
 DOC_REFERENCE = [
     {
         'identity': 'vip_routine_site_stock', 'name': '',  # 页面库存文件
-        'key_words': '常态可扣减|剩余可售库存', 'key_pos': ['条码', ], 'val_pos': ['可扣库存', ], 'val_type': ['INT', ],
+        'key_words': '常态可扣减', 'key_pos': ['条码', ], 'val_pos': ['可扣库存', ], 'val_type': ['INT', ],
         'importance': 'caution'
     },
     {
@@ -158,7 +158,7 @@ DOC_REFERENCE = [
     },
     {
         'identity': 'vip_daily_sales', 'name': '',  # 日销量、商品链接
-        'key_words': '商品明细|条码粒度', 'key_pos': ['条码', '日期', ], 'val_pos': ['销售量', '商品链接', ],
+        'key_words': '条码粒度', 'key_pos': ['条码', '日期', ], 'val_pos': ['销售量', '商品链接', ],
         'val_type': ['INT', 'TEXT', ],
         'importance': 'caution'
     },
@@ -187,7 +187,7 @@ DOC_REFERENCE = [
     },
     {
         'identity': 'mc_daily_sales', 'name': '',
-        'key_words': '业务库存出入库流水', 'key_pos': ['货品编码', '出入库时间'], 'val_pos': ['库存变动', ], 'val_type': ['INT', ],
+        'key_words': '业务库存出入库流水', 'key_pos': ['货品ID', '出入库时间'], 'val_pos': ['库存变动'], 'val_type': ['INT'],
         'importance': 'caution'
     },
     {

@@ -17,7 +17,7 @@ sql_create_table = [f"""
     {str.join(',', [kp + ' TEXT NOT NULL' for kp in d_rf['key_pos']])},
     {str.join(',', [vp + ' ' + vt for vp, vt in zip(d_rf['val_pos'], d_rf['val_type'])])});"""
                     for d_rf in st.DOC_REFERENCE]
-sql_create_table = [re.sub(r'日期\s+TEXT', '日期 DATETIME', content) for content in sql_create_table]
+# sql_create_table = [re.sub(r'日期\s+TEXT', '日期 DATETIME', content) for content in sql_create_table]
 sql_create_table.append(sql_create_tmj_files_info)
 table_list = [item['identity'] for item in st.DOC_REFERENCE]
 table_list.append('tmj_files_info')
@@ -28,8 +28,10 @@ for create_table in sql_create_table:
     cur.execute(create_table)
 
 # 手工处理的query写在此处
-# cur.execute('drop table tmj_files_info')
-
+# cur.execute('drop table tmj_files_info;')
+# cur = cur.execute("select * from vip_routine_site_stock where id<'10';")
+# for i in cur:
+#     print(i)
 conn.commit()
 # cc = 1
 # for table in table_list:

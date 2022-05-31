@@ -20,6 +20,7 @@ class DocumentIO(threading.Thread):
     """s
     基于多线程读取写入文件,判断文件来源.
     实例化此类实现多线程,外部使用2个进程,每个实例是1个线程,进程内部多线程读取.
+    轻量化的application使用sqlite, mysql显然功能更好。
     """
     # sql_mark标明两个文件是必须从sqldb中读取，一部分然后文件中读取合并在一起。
     # 其他文件都是根据更新时间选择读取来源
@@ -32,7 +33,6 @@ class DocumentIO(threading.Thread):
     thread_num = 0  # 保存所需线程数, 用于和thread_counter进行比对
     thread_counter = 0  # 统计开启的线程数, 全部读取之后关闭conn
     queue = queue.Queue()
-    conn = sqlite.connect(sql_db)  # 所有线程共用一个conn, 线程计数满足后才关闭conn
     mutex = threading.Lock()
 
     @classmethod
@@ -71,7 +71,7 @@ class DocumentIO(threading.Thread):
                     file['identity'] = doc['identity']
                     cls.thread_num += 1
         cls.mutex.acquire()
-        conn = cls.conn  # 直接引用类属性中的conn, 不用反复开启连接, 方便适应sqlite连接的单线程特点
+        conn = sqlite.connect(cls.sql_db)  # sqlite是单线程,不能线程共用一个conn  # 直接引用类属性中的conn, 不用反复开启连接, 方便适应sqlite连接的单线程特点
         cursor = conn.cursor()
         cursor_data = cursor.execute("SELECT identity, file_name, file_mtime FROM tmj_files_info;")
         # print(files_list)
@@ -79,9 +79,10 @@ class DocumentIO(threading.Thread):
             for file in cls.files:
                 # print(file)
                 if file['file_name'] == row[1]:
-                    file['file_mtime_in_sqlite'] = row[3]
+                    file['file_mtime_in_sqlite'] = row[2]
                     # print('修改了')
         cursor.close()
+        conn.close()
         cls.mutex.release()
         return cls.files
 
@@ -98,48 +99,57 @@ class DocumentIO(threading.Thread):
         self.check_file()
 
     def check_file(self) -> None:
+        for doc in DocumentIO.sql_mark:
+            if self.identity == doc['identity']:
+                self.from_sql = doc['mode']
         file_name = []
         for file in self.files:  # files是类属性,全部文件夹中的文件信息列表
             if file['identity'] == self.identity:
                 file_name.append(file['file_name'])
                 if file['file_mtime'] == file['file_mtime_in_sqlite']:
-                    self.from_sql = 'substitute'
+                    self.from_sql = 'substitute'  # 是否从sqlite读取的最终依据是文件是否更新过
         if len(file_name) > 0:
             self.file = file_name
             self.count_threads()  # 存在文件就会开启线程进行读取, thread_counter加1
-        for doc in DocumentIO.sql_mark:
-            if self.identity == doc['identity']:
-                self.from_sql = doc['mode']
 
     def read_doc(self) -> pd.DataFrame():
         doc_df = pd.DataFrame()
         for file in self.file:  # file是实例属性,将要读取的文件信息,也是列表,因为同一性质文件可能有多个
             matched_csv = re.match(r'^.*\.csv$', file)
             matched_excel = re.match(r'^.*\.xlsx?$', file)
-            pd_cols = self.doc_ref['key_pos']
-            pd_cols.extend(self.doc_ref['val_pos'])
+            pd_cols = self.doc_ref['key_pos'].copy()  # 直接引用后使用extend方法导致一系列问题
+            x = self.doc_ref['val_pos'].copy()  # 避免list出现异常,需要使用copy方法
+            pd_cols.extend(x)
             if matched_csv:
                 one_df = pd.read_csv(file, usecols=lambda col: col in pd_cols)
-                doc_df = pd.concat([doc_df, one_df], axis=0)
+                doc_df = pd.concat([doc_df, one_df], ignore_index=True, axis=0)
             if matched_excel:
                 # 默认引擎是openpyxl,使用xlrd比openpyxl速度更快,但是必须是新版,pip install xlrd==1.2.0
                 one_df = pd.read_excel(file, engine='xlrd', usecols=lambda col: col in pd_cols)
-                doc_df = pd.concat([doc_df, one_df], axis=0)
+                doc_df = pd.concat([doc_df, one_df], ignore_index=True, axis=0)
+        doc_df = doc_df.dropna()  # 剔除空行, 很重要
+        if self.from_sql == 'merge':
+            sales_date_head = datetime.datetime.today() - datetime.timedelta(days=st.VIP_SALES_INTERVAL)
+            date_col = self.doc_ref['key_pos'][1]
+            doc_df = doc_df.loc[lambda df: pd.to_datetime(df[date_col]) >= sales_date_head, :]
         return doc_df
 
     def read_sqlite(self) -> pd.DataFrame():
-        pd_cols = self.doc_ref['key_pos']
-        pd_cols.extend(self.doc_ref['val_pos'])
+        pd_cols = self.doc_ref['key_pos'].copy()  # 直接引用后使用extend方法导致一系列问题
+        x = self.doc_ref['val_pos'].copy()  # 避免list出现异常,需要使用copy方法
+        pd_cols.extend(x)
         sql_constraint = ''
         if self.from_sql == 'merge':
             sales_date_head = datetime.datetime.today() - datetime.timedelta(days=st.VIP_SALES_INTERVAL)
             sql_constraint = f" WHERE {self.doc_ref['key_pos'][1]} >= '{sales_date_head}'"  # vip和mc日销文件的date列名不同
         self.mutex.acquire()
-        conn = self.conn  # 引用类属性中的conn
+        conn = sqlite.connect(self.sql_db)
+        # sqlite是单线程,不能线程共用一个conn
         # sql_cursor = conn.cursor()
+        # print(pd_cols, '**********')  # tiaoshi
         sql_query = f"SELECT {str.join(',', pd_cols)} FROM {self.identity}{sql_constraint}"
         sql_df = pd.read_sql_query(sql_query, con=conn)  # 要实现两个df的concat,两者的index列也要相同
-        # cursor.close()
+        conn.close()
         self.mutex.release()
         return sql_df
 
@@ -150,25 +160,26 @@ class DocumentIO(threading.Thread):
             sql_date = pd.DataFrame()
             date_col = self.doc_ref['key_pos'][1]
             if not doc_df.empty:
-                doc_df[date_col] = pd.to_datetime(doc_df[date_col])
+                # doc_df[date_col] = pd.to_datetime(doc_df[date_col])
                 self.to_sql_df = doc_df
-                # doc_date = doc_df.drop_duplicates(subset=[date_col], keep='first')[date_col]
             if not sql_df.empty:
-                sql_df[date_col] = pd.to_datetime(sql_df[date_col])
+                # sql_df[date_col] = pd.to_datetime(sql_df[date_col])
                 sql_date = sql_df.drop_duplicates(subset=[date_col], keep='first')[date_col]
             if not (doc_df.empty or sql_df.empty):
-                mask = [False if x in sql_date else True for x in doc_df[date_col]]
+                mask = [False if x in list(sql_date) else True for x in doc_df[date_col]]
                 doc_masked_df = doc_df[mask]
                 if doc_masked_df.empty:
-                    merged_df = sql_df
                     self.to_sql_df = None
+                    merged_df = sql_df
                 else:
-                    merged_df = pd.concat([doc_masked_df, sql_df], keys=['doc_df', 'sql_df'])
                     self.to_sql_df = doc_masked_df
+                    merged_df = pd.concat(
+                        [doc_masked_df, sql_df], ignore_index=True, keys=['doc', 'sqlite'])
                 return merged_df
             else:
-                valid_df = doc_df if not doc_df.empty else sql_df
-                return valid_df
+                # 从数据库中读取的的df为空时, 包含无效的index, 会在concat时报错, 避免使用
+                merged_df = doc_df if not doc_df.empty else sql_df
+                return merged_df
         elif self.from_sql == 'substitute':
             sql_df = self.read_sqlite()
             return sql_df
@@ -179,14 +190,18 @@ class DocumentIO(threading.Thread):
 
     def to_sqlite(self):
         self.mutex.acquire()
-        conn = self.conn
+        conn = sqlite.connect(self.sql_db)  # sqlite是单线程,不能线程共用一个conn
         cursor = conn.cursor()
         if self.to_sql_df is not None:
             if self.from_sql != 'merge':
                 sql_query = f"DELETE FROM {self.identity};"
                 cursor.execute(sql_query)
+                self.to_sql_df.to_sql(
+                    self.identity, conn, if_exists='append', index=False, chunksize=1000)
             else:
-                self.to_sql_df.to_sql(self.identity, conn)
+                # 需要特别留意DataFrame.to_sql()的参数,必须明确这些参数
+                self.to_sql_df.to_sql(
+                    self.identity, conn, if_exists='append', index=False, chunksize=1000)
             self.to_sql = True
 
         query_data = []
@@ -196,14 +211,16 @@ class DocumentIO(threading.Thread):
         # 把最新的文件信息写进sqlite中,用于下一次比对,旧信息全部删除.
         cursor.execute(f"DELETE FROM tmj_files_info WHERE identity = '{self.identity}';")
         cursor.executemany(
-            "INSERT INTO tmj_files_info(identity, file_name, file_mtime) VALUES(?,?,?,?);", query_data)
+            "INSERT INTO tmj_files_info(identity, file_name, file_mtime) VALUES(?,?,?);", query_data)
         conn.commit()
         cursor.close()
-        if self.thread_counter == self.thread_num:
-            conn.close()
+        conn.close()
         self.mutex.release()
 
     def run(self) -> None:
+        tracing = f"reading_thread: {self.thread_counter} ({self.identity})is initialized! " \
+                  f"mode: {self.from_sql} ^_^"
+        print(tracing)
         if self.file is None:
             print(f"{self.identity}'s initialization is dispensable!")
         else:
@@ -213,7 +230,3 @@ class DocumentIO(threading.Thread):
             self.queue.put(df_dict)
             self.mutex.release()
             self.to_sqlite()
-
-
-
-
