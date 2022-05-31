@@ -7,7 +7,6 @@ import numpy as np
 import pandas as pd
 import threading
 import queue
-# import multiprocessing
 from pathlib import Path
 import sqlite3 as sqlite
 
@@ -17,12 +16,13 @@ import sqlite_init
 
 # CPUS = os.cpu_count()
 class DocumentIO(threading.Thread):
-    """s
-    基于多线程读取写入文件,判断文件来源.
-    实例化此类实现多线程,外部使用2个进程,每个实例是1个线程,进程内部多线程读取.
-    轻量化的application使用sqlite, mysql显然功能更好。
     """
-    # sql_mark标明两个文件是必须从sqldb中读取，一部分然后文件中读取合并在一起。
+    基于多线程读取写入文件,判断文件来源.
+    实例化此类实现多线程,一个分类文件开启一个线程读取.
+    数据库sqlite不支持多线程, 且conn不能存在于多线程中，必须使用mutex进行保护.
+    轻量化的application使用sqlite速度已经足够快, mysql显然功能更好, 但是需要单独安装配置数据库.
+    """
+    # sql_mark标明两个文件是必须从sqldb中读取，一部分然后文件中读取合并在一起.
     # 其他文件都是根据更新时间选择读取来源
     sql_mark = [
         {'identity': 'mc_daily_sales', 'mode': 'merge'},
@@ -47,6 +47,7 @@ class DocumentIO(threading.Thread):
             'file_name': str(file),
             'file_mtime': file.stat().st_mtime,
             'file_mtime_in_sqlite': None,
+            'read_doc': False,
             'updated_sqlite': False
         } for file in files.glob('*')]
         cls.files = files_list
@@ -80,13 +81,15 @@ class DocumentIO(threading.Thread):
                 # print(file)
                 if file['file_name'] == row[1]:
                     file['file_mtime_in_sqlite'] = row[2]
+                    if file['file_mtime'] != row[2]:
+                        file['read_doc'] = True
                     # print('修改了')
         cursor.close()
         conn.close()
         cls.mutex.release()
         return cls.files
 
-    def __init__(self, doc_reference):
+    def __init__(self, doc_reference: dict):
         super().__init__()
         self.identity = doc_reference['identity']
         self.doc_ref = doc_reference
