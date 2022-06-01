@@ -1,9 +1,8 @@
-import re
 import sqlite3
 
 import settings as st
 
-sql_db = 'tmj_sqlite.db'
+sql_db = r'C:\Users\Administrator\Desktop\tmj_vip_mc\tmj_sqlite.db'
 sql_create_tmj_files_info = '''
     CREATE TABLE IF NOT EXISTS tmj_files_info
     (ID INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
@@ -32,7 +31,7 @@ for create_table in sql_create_table:
 # cur = cur.execute("select * from vip_routine_site_stock where id<'10';")
 # for i in cur:
 #     print(i)
-conn.commit()
+
 # cc = 1
 # for table in table_list:
 #     cur = cur.execute(f"select * from sqlite_master where name='{table}';")
@@ -40,6 +39,7 @@ conn.commit()
 #         print(cc)
 #         print('查询成功', row)
 #         cc += 1
+conn.commit()
 conn.close()
 
 

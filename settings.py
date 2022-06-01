@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
-
-# 设置运行的默认参数
+import sys
 import win32con
 import win32api
 import datetime
+
 
 # 表格生成后是否打开, True表示'是',False表示'否'
 SHOW_DOC_AFTER_GENERATED = True
@@ -14,7 +14,10 @@ MC_SALES_INTERVAL = 7
 # 占位符,用于列簇层级结构
 placeholder = None
 # ---------------------文件夹路径(填写在引号内)-------------------------
-DOCS_PATH = r'C:\Users\Administrator\Desktop\唯品新工具开发相关资料'
+# 网上导出数据文件夹路径
+DOCS_PATH = r'C:\Users\Administrator\Desktop\tmj_vip_mc\vip_docs'
+# 代码文件夹路径
+sys.path.append(r'C:\Users\Administrator\Desktop\tmj_vip_mc')
 # 库存显示方面的设置
 warehouses = [
     'HanChuan', 'ChengDong', 'LingDing', 'YueZhong', 'LinDa', 'PiFa', 'KunShan', 'adjustment'
@@ -152,7 +155,7 @@ doc_stock = [{
     'identity': warehouses[i].lower() + '_stock', 'name': '',
     'key_words': '^[^虚拟].*' + warehouses_key_re[i] + '[^虚拟].*$', 'key_pos': ['商家编码', ], 'val_pos': ['可发库存', '可用库存'],
     'val_type': ['INT', 'INT'],
-    'importance': 'optional'
+    'importance': 'optional', 'mode': None,
 } for i in range(0, len(warehouses))
 ]
 
@@ -161,7 +164,7 @@ doc_stock_virtual = [{
     'key_words': warehouses_key_re[i] + '.*虚拟|虚拟.*' + warehouses_key_re[i],
     'key_pos': ['商家编码', ], 'val_pos': ['可发库存', '可用库存'],
     'val_type': ['INT', 'INT'],
-    'importance': 'optional'
+    'importance': 'optional', 'mode': None,
 } for i in range(0, len(warehouses))
 ]
 
@@ -170,46 +173,46 @@ DOC_REFERENCE = [
     {
         'identity': 'vip_routine_site_stock', 'name': '',  # 页面库存文件
         'key_words': '常态可扣减', 'key_pos': ['条码', ], 'val_pos': ['可扣库存', ], 'val_type': ['INT', ],
-        'importance': 'caution'
+        'importance': 'caution', 'mode': None,
     },
     {
         'identity': 'vip_routine_operation', 'name': '',  # 上下架状态文件
         'key_words': '常态商品运营', 'key_pos': ['条码', ], 'val_pos': ['尺码状态', ], 'val_type': ['TEXT', ],
-        'importance': 'caution'
+        'importance': 'caution', 'mode': None,
     },
     {
         'identity': 'vip_daily_sales', 'name': '',  # 日销量、商品链接
         'key_words': '条码粒度', 'key_pos': ['条码', '日期', ], 'val_pos': ['销售量', '商品链接', ],
         'val_type': ['INT', 'TEXT', ],
-        'importance': 'caution'
+        'importance': 'caution', 'mode': 'merge',
     },
     {
         'identity': 'vip_fundamental_collections', 'name': '',  # 唯品总货表
         'key_words': '唯品会十月总货表', 'key_pos': ['唯品后台条码', '旺店通条码'],
         'val_pos': ['类别', '商品名称', '唯品会货号', '日常券', '自主分类'], 'val_type': ['TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT'],
-        'importance': 'required'
+        'importance': 'required', 'mode': None,
     },
     {
         'identity': 'tmj_atom', 'name': '',  # 单品信息表，包含名称、货号、成本、重量等信息
         'key_words': '单品列表', 'key_pos': ['商家编码'], 'val_pos': ['货品编号', '货品名称', '规格名称', '会员价', '重量'],
         'val_type': ['TEXT', 'TEXT', 'TEXT', 'REAL', 'REAL'],
-        'importance': 'required'
+        'importance': 'required', 'mode': None,
     },
     {
         'identity': 'tmj_combination', 'name': '',  # 组合表
         'key_words': '组合装明细', 'key_pos': ['商家编码', ], 'val_pos': ['单品名称', '单品货品编号', '单品商家编码', '数量'],
         'val_type': ['TEXT', 'TEXT', 'TEXT', 'INT'],
-        'importance': 'required'
+        'importance': 'required', 'mode': None,
     },
     {
         'identity': 'mc_item', 'name': '',
         'key_words': 'export-', 'key_pos': ['货品编码', '条码'], 'val_pos': ['采购负责人', '上下架状态'], 'val_type': ['TEXT', 'TEXT'],
-        'importance': 'caution'
+        'importance': 'caution', 'mode': None,
     },
     {
         'identity': 'mc_daily_sales', 'name': '',
-        'key_words': '业务库存出入库流水', 'key_pos': ['货品ID', '出入库时间'], 'val_pos': ['库存变动'], 'val_type': ['INT'],
-        'importance': 'caution'
+        'key_words': '业务库存出入库流水', 'key_pos': ['货品ID', '出入库时间', '业务类型'], 'val_pos': ['库存变动'], 'val_type': ['INT'],
+        'importance': 'caution', 'mode': 'merge',
     },
     {
         'identity': 'vip_bench_player', 'name': '',
@@ -218,12 +221,12 @@ DOC_REFERENCE = [
             '商家编码_替代1', '商家编码_替代2', '商家编码_替代3', '商家编码_替代4',
             '交换比_替代1', '交换比_替代2', '交换比_替代3', '交换比_替代4'],  # 交换比是指一个替代品可以替换多少个首发商品
         'val_type': ['TEXT', 'TEXT', 'TEXT', 'TEXT', 'REAL', 'REAL', 'REAL', 'REAL', ],
-        'importance': 'optional'
+        'importance': 'optional', 'mode': None,
     },
     {
         'identity': 'vip_summary', 'name': '',  # 生成的统计最终表,当需要分解组合的时候读取.
         'key_words': '唯品库存统计分析', 'key_pos': ['唯品条码'], 'val_pos': ['组合分解'], 'val_type': ['INT'],
-        'importance': 'optional'
+        'importance': 'optional', 'mode': None,
     },
 ]
 
