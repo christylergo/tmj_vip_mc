@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 
 # 设置运行的默认参数
-# import win32con
-# import win32api
+import win32con
+import win32api
 import datetime
 
 # 表格生成后是否打开, True表示'是',False表示'否'
@@ -14,7 +14,7 @@ MC_SALES_INTERVAL = 7
 # 占位符,用于列簇层级结构
 placeholder = None
 # ---------------------文件夹路径(填写在引号内)-------------------------
-DOCS_PATH = r'C:\Users\chris\Desktop\tmj_vip_tool\vip_docs'
+DOCS_PATH = r'C:\Users\Administrator\Desktop\唯品新工具开发相关资料'
 # 库存显示方面的设置
 warehouses = [
     'HanChuan', 'ChengDong', 'LingDing', 'YueZhong', 'LinDa', 'PiFa', 'KunShan', 'adjustment'
@@ -73,7 +73,7 @@ daily_sales_week_title = [
 
 daily_sales_week_priority = [
     [FEATURE_PRIORITY['DAILY_SALES_WEEK'][0] + i,
-        FEATURE_PRIORITY['DAILY_SALES_WEEK'][1]]
+     FEATURE_PRIORITY['DAILY_SALES_WEEK'][1]]
     for i in range(0, VIP_SALES_INTERVAL)
 ]
 
@@ -92,39 +92,39 @@ for i in range(0, len(warehouses)):
 # 定义全部可能会用到的列,用生成式来定义特性一致的列，如库存列以及日销列
 COLUMN_PROPERTY = [
     {'identity': 'row_nu', 'name': '序号',
-        'refer_doc': 'self', 'floating_title': placeholder},
+     'refer_doc': 'self', 'floating_title': placeholder},
     {'identity': 'platform', 'name': '在售平台', 'refer_doc': 'arrAtom',
-        'floating_title': 'platform'},  # 1唯品，2猫超，3共用
+     'floating_title': 'platform'},  # 1唯品，2猫超，3共用
     {'identity': 'status', 'name': '在架状态',
-        'refer_doc': 'vip_routine_operation', 'floating_title': '尺码状态'},
+     'refer_doc': 'vip_routine_operation', 'floating_title': '尺码状态'},
     {'identity': 'vip_barcode', 'name': '唯品条码',
-        'refer_doc': 'vip_fundamental_collections', 'floating_title': '唯品后台条码'},
+     'refer_doc': 'vip_fundamental_collections', 'floating_title': '唯品后台条码'},
     {'identity': 'vip_commodity', 'name': '唯品货号', 'refer_doc': 'vip_fundamental_collections',
      'floating_title': '唯品会货号'},
     {'identity': 'vip_item_name', 'name': '商品名称',
-        'refer_doc': 'vip_fundamental_collections', 'floating_title': '商品名称'},
+     'refer_doc': 'vip_fundamental_collections', 'floating_title': '商品名称'},
     {'identity': 'tmj_barcode', 'name': '旺店通编码明细',
-        'refer_doc': 'arrAtom', 'floating_title': 'tmj_barcode'},
+     'refer_doc': 'arrAtom', 'floating_title': 'tmj_barcode'},
     {'identity': 'vip_category', 'name': '类别',
-        'refer_doc': 'vip_fundamental_collections', 'floating_title': '类别'},
+     'refer_doc': 'vip_fundamental_collections', 'floating_title': '类别'},
     {'identity': 'month_sales', 'name': '月销量',
-        'refer_doc': 'vip_daily_sales', 'floating_title': 'month_sales'},
+     'refer_doc': 'vip_daily_sales', 'floating_title': 'month_sales'},
     {'identity': 'mc_week_sales', 'name': '猫超周销量',
-        'refer_doc': 'mc_daily_sales', 'floating_title': 'mc_week_sales'},
+     'refer_doc': 'mc_daily_sales', 'floating_title': 'mc_week_sales'},
     {'identity': 'site_DSI', 'name': '',
-        'refer_doc': 'self', 'floating_title': placeholder},
+     'refer_doc': 'self', 'floating_title': placeholder},
     {'identity': 'site_inventory', 'name': '页面库存余量',
-        'refer_doc': 'vip_routine_site_stock', 'floating_title': '可扣库存'},
+     'refer_doc': 'vip_routine_site_stock', 'floating_title': '可扣库存'},
     {'identity': 'disassemble', 'name': '组合分解',
-        'refer_doc': 'self', 'floating_title': placeholder},
+     'refer_doc': 'self', 'floating_title': placeholder},
     {'identity': 'cost', 'name': '成本',
-        'refer_doc': 'tmj_atom', 'floating_title': '会员价'},
+     'refer_doc': 'tmj_atom', 'floating_title': '会员价'},
     {'identity': 'weight', 'name': '重量',
-        'refer_doc': 'tmj_atom', 'floating_title': '重量'},
+     'refer_doc': 'tmj_atom', 'floating_title': '重量'},
     {'identity': 'annotation', 'name': '备注',
-        'refer_doc': 'arrAtom', 'floating_title': 'annotation'},
+     'refer_doc': 'arrAtom', 'floating_title': 'annotation'},
     {'identity': 'site_link', 'name': '商品链接',
-        'refer_doc': 'vip_daily_sales', 'floating_title': '商品链接'},
+     'refer_doc': 'vip_daily_sales', 'floating_title': '商品链接'},
 ]
 
 vip_daily_sales_columns = [{
@@ -234,8 +234,8 @@ print('settings->tracing...')
 
 
 # 获取桌面路径
-# def get_desktop():
-#     desktop_key = win32api.RegOpenKey(
-#         win32con.HKEY_CURRENT_USER, r'Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders', 0,
-#         win32con.KEY_READ)
-#     return win32api.RegQueryValueEx(desktop_key, 'Desktop')[0]
+def get_desktop() -> str:
+    desktop_key = win32api.RegOpenKey(
+        win32con.HKEY_CURRENT_USER, r'Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders', 0,
+        win32con.KEY_READ)
+    return win32api.RegQueryValueEx(desktop_key, 'Desktop')[0]
