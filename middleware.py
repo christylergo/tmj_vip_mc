@@ -18,20 +18,25 @@ class MiddlewareArsenal:
     def vip_daily_sales(self, **kwargs) -> pd.DataFrame():
         print('vip_daily_sales')
 
+    def vip_routine_site_stock(self, **kwargs) -> pd.DataFrame():
+        """
+        剔除val_pos列中的无效值, 目前是下划线
+        :param kwargs:
+        :return:
+        """
 
+
+        pass
+
+
+#  以字典构建dataframe处理函数集合, 后续直接用各个df的identity来调用
 middleware_dict = MiddlewareArsenal.__dict__
-aa = []
-bb = []
+middleware_arsenal = {}
 for func_name, func in middleware_dict.items():
-    if not re.match(r'^__\w+__$', func_name):  # 如果有大量的regular匹配需求, 最好先调用compile
-        aa.append(func_name)
-        bb.append(functools.partial(func, self=None))
-middleware_arsenal = dict(zip(aa, bb))
+    if re.match(r'^(?=[^_])\w+(?<=[^_])$', func_name):  # 排除系统属性, 如果有大量的regular匹配需求, 最好先调用compile
+        middleware_arsenal[func_name] = functools.partial(func, self=None)
 
-middleware_arsenal["vip_daily_sales"]()
-
-
-# dd()
+# middleware_arsenal["vip_daily_sales"]()
 
 
 class AssemblyLines:
@@ -49,16 +54,35 @@ class AssemblyLines:
         匹配每个唯品条码对应的各仓库存, 首先应把唯品条码map到tmj组合及单品.
 
         """
+        @classmethod
+        def assemble(cls):
+            pass
         pass
 
     class VipElementWiseDailySales:
+
+        @classmethod
+        def assemble(cls):
+            pass
         pass
 
     class McElementWiseDailySales:
+
+        @classmethod
+        def assemble(cls):
+            pass
         pass
 
     class VipCombinedWithMc:
+
+        @classmethod
+        def assemble(cls):
+            pass
         pass
 
     class VipNotes:
+
+        @classmethod
+        def assemble(cls):
+            pass
         pass

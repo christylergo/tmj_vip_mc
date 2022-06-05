@@ -172,10 +172,14 @@ class DocumentIO(threading.Thread):
             sql_date = pd.DataFrame()
             date_col = self.doc_ref['key_pos'][1]
             if not doc_df.empty:
-                # doc_df[date_col] = pd.to_datetime(doc_df[date_col])
+                if self.identity == 'mc_daily_sales':
+                    doc_df[date_col] = pd.to_datetime(doc_df[date_col]).dt.date
+                    doc_df[date_col] = doc_df[date_col].astype('str')
                 self.to_sql_df = doc_df
             if not sql_df.empty:
-                # sql_df[date_col] = pd.to_datetime(sql_df[date_col])
+                if self.identity == 'mc_daily_sales':
+                    sql_df[date_col] = pd.to_datetime(sql_df[date_col]).dt.date
+                    sql_df[date_col] = sql_df[date_col].astype('str')
                 sql_date = sql_df.drop_duplicates(
                     subset=[date_col], keep='first')[date_col]
             if not (doc_df.empty or sql_df.empty):
@@ -232,26 +236,28 @@ class DocumentIO(threading.Thread):
         """
         conn = sqlite.connect(cls.sql_db)  # sqlite是单线程,不能线程共用一个conn
         cursor = conn.cursor()
+        query_data = []
         for to_sql in list_ins:
             if to_sql['to_sql_df'] is not None:
                 if to_sql['mode'] == 'merge':
                     # 需要特别留意DataFrame.to_sql()的参数,必须明确这些参数
                     to_sql['to_sql_df'].to_sql(
                         to_sql['identity'], conn, if_exists='append', index=False, chunksize=1000)
+                    print(to_sql['to_sql_df'].head())
                 else:
                     sql_query = f"DELETE FROM {to_sql['identity']};"
                     cursor.execute(sql_query)
                     to_sql['to_sql_df'].to_sql(
                         to_sql['identity'], conn, if_exists='append', index=False, chunksize=1000)
-        #  ---------------类方法内部的不同功能代码块分割线------------------
-        query_data = []
-        for file in cls.files:
-            if file['identity'] is not None and file['read_doc']:
-                query_data.append(
-                    (file['identity'], file['file_name'], file['file_mtime']))
-                # 把最新的文件信息写进sqlite中,用于下一次比对,旧信息全部删除.
-                cursor.execute(
-                    f"DELETE FROM tmj_files_info WHERE identity = '{file['identity']}';")
+                # 写入sqlite的文件更新信息, 避免出现线程执行失败, 但是文件信息却更新了的情况
+                for file in cls.files:
+                    if file['identity'] == to_sql['identity']:
+                        query_data.append(
+                            (file['identity'], file['file_name'], file['file_mtime']))
+                        # 把最新的文件信息写进sqlite中,用于下一次比对,旧信息全部删除.
+                        cursor.execute(
+                            f"DELETE FROM tmj_files_info WHERE identity = '{file['identity']}';")
+        #  --------------------------------
         cursor.executemany(
             "INSERT INTO tmj_files_info(identity, file_name, file_mtime) VALUES(?,?,?);", query_data)
         conn.commit()
