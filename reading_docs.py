@@ -172,7 +172,7 @@ class DocumentIO(threading.Thread):
             sql_date = pd.DataFrame()
             date_col = self.doc_ref['key_pos'][1]
             if not doc_df.empty:
-                if self.identity == 'mc_daily_sales':
+                if self.identity == 'mc_daily_sales':  # 这个针对性操作应该放进middleware里
                     doc_df[date_col] = pd.to_datetime(doc_df[date_col]).dt.date
                     doc_df[date_col] = doc_df[date_col].astype('str')
                 self.to_sql_df = doc_df
