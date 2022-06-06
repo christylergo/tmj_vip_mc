@@ -2,15 +2,11 @@ aaa = [{'a1': 1, 'a2': 2}, {'a1': 1, 'b2': 2}]
 
 
 def func(aa):
-    for a in aa:
-        a['a1'] = 9
+    print('func: ',aa)
 
 
-func(aaa)
-print(aaa)
+ccc = ['a', 'b','c']
 
-a = -1
-if bool(a):
-    print('-1true')
-
-ccc = [1, -2, -9]
+ddd = {x: func for x in ccc}
+ddd['a'](9)
+ddd['c'](100)

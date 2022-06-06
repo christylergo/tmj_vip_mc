@@ -9,7 +9,7 @@ if __name__ == '__main__':
         identity = data_ins['identity']
         try:
             preprocess_func = middleware_arsenal[identity]
-            preprocess_func(data_ins=data_ins)  # partial对象需要传递key argument
+            preprocess_func(data_ins)  # partial对象需要传递key argument, lambda作为中介进行了传递
             # print(data_ins['data_frame'].head(25))
         except KeyError:
             pass

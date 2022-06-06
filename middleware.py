@@ -76,13 +76,29 @@ class MiddlewareArsenal:
         data_ins['data_frame'] = data_frame[criterion]
         # print(data_ins['data_frame'].head())
 
+    def __warehouse_stock(self, data_ins) -> None:
+        while self is not None:
+            print('eliminate the weak warnings')
+        pass
+
 
 #  以字典构建dataframe处理函数集合, 后续直接用各个df的identity来调用
 middleware_dict = MiddlewareArsenal.__dict__
 middleware_arsenal = {}
 for func_name, func in middleware_dict.items():
     if re.match(r'^(?=[^_])\w+(?<=[^_])$', func_name):  # 排除系统属性, 如果有大量的regular匹配需求, 最好先调用compile
-        middleware_arsenal[func_name] = functools.partial(func, self=None)
+        middleware_func = functools.partial(func, self=None)
+        middleware_arsenal[func_name] = lambda x: middleware_func(data_ins=x)
+    if re.match(r'^(?=__)\w+(?<=[^_])$', func_name):
+        warehouse_func = functools.partial(func, self=None)
+        stock_func_dict = {
+            warehouse.lower() + '_stock': lambda x: warehouse_func(data_ins=x)
+            for warehouse in st.warehouses}
+        middleware_arsenal.update(stock_func_dict)
+        virtual_stock_func_dict = {
+            warehouse.lower() + '_stock_virtual': lambda x: warehouse_func(data_ins=x)
+            for warehouse in st.warehouses}
+        middleware_arsenal.update(virtual_stock_func_dict)
 
 
 # aaa = 123456
