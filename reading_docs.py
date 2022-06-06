@@ -132,12 +132,12 @@ class DocumentIO(threading.Thread):
                 # 把关于xlrd的warnings进行捕获, 避免大量的关于xlrd版本的warnings干扰正常提示
                 with warnings.catch_warnings(record=True):
                     one_df = pd.read_excel(
-                        file, engine='xlrd', usecols=lambda col: col in pd_cols)
+                        file, engine='xlrd', usecols=lambda col: col in pd_cols,
+                        dtype={x: str for x in self.doc_ref['key_pos']})  # 部分excel文件key_pos数据类型不是str, 强制转换
                     doc_df = pd.concat([doc_df, one_df], ignore_index=True, axis=0)
         doc_df = doc_df.dropna()  # 剔除空行, 很重要
         if self.from_sql == 'merge':
-            sales_date_head = datetime.datetime.today(
-            ) - datetime.timedelta(days=st.VIP_SALES_INTERVAL)
+            sales_date_head = datetime.datetime.today() - datetime.timedelta(days=st.VIP_SALES_INTERVAL)
             date_col = self.doc_ref['key_pos'][1]
             doc_df = doc_df.loc[lambda df: pd.to_datetime(
                 df[date_col]) >= sales_date_head, :]
@@ -149,10 +149,9 @@ class DocumentIO(threading.Thread):
         pd_cols.extend(x)
         sql_constraint = ''
         if self.from_sql == 'merge':
-            sales_date_head = datetime.datetime.today(
-            ) - datetime.timedelta(days=st.VIP_SALES_INTERVAL)
+            sales_date_head = datetime.datetime.today() - datetime.timedelta(days=st.VIP_SALES_INTERVAL)
             # vip和mc日销文件的date列名不同
-            sql_constraint = f" WHERE {self.doc_ref['key_pos'][1]} >= '{sales_date_head}'"
+            sql_constraint = f" WHERE CAST({self.doc_ref['key_pos'][1]} AS DATETIME) >= '{sales_date_head}'"
         self.mutex.acquire()
         conn = sqlite.connect(self.sql_db)
         # sqlite是单线程,不能线程共用一个conn
@@ -172,7 +171,8 @@ class DocumentIO(threading.Thread):
             sql_date = pd.DataFrame()
             date_col = self.doc_ref['key_pos'][1]
             if not doc_df.empty:
-                if self.identity == 'mc_daily_sales':  # 这个针对性操作应该放进middleware里
+                # 这个日期格式的针对性操作应该放进middleware里, 比较麻烦, 暂时不改了
+                if self.identity == 'mc_daily_sales':
                     doc_df[date_col] = pd.to_datetime(doc_df[date_col]).dt.date
                     doc_df[date_col] = doc_df[date_col].astype('str')
                 self.to_sql_df = doc_df
@@ -213,10 +213,12 @@ class DocumentIO(threading.Thread):
         if self.file is None:
             print(f"{self.identity}'s initialization is dispensable!")
         else:
+            old_time = time.time()
             data_frame = self.get_data()
+            # print('get_data耗时: ', time.time()-old_time)
             sql_df = self.to_sql_df
             #  放入queue中的数据的结构
-            df_dict = {'identity': self.identity, 'data_frame': data_frame,
+            df_dict = {'identity': self.identity, 'doc_ref': self.doc_ref, 'data_frame': data_frame,
                        'to_sql_df': sql_df, 'mode': self.from_sql}
             self.mutex.acquire()
             self.queue.put(df_dict)
@@ -243,7 +245,7 @@ class DocumentIO(threading.Thread):
                     # 需要特别留意DataFrame.to_sql()的参数,必须明确这些参数
                     to_sql['to_sql_df'].to_sql(
                         to_sql['identity'], conn, if_exists='append', index=False, chunksize=1000)
-                    print(to_sql['to_sql_df'].head())
+                    # print(to_sql['to_sql_df'].head())
                 else:
                     sql_query = f"DELETE FROM {to_sql['identity']};"
                     cursor.execute(sql_query)
@@ -287,7 +289,7 @@ def reading_worker(process_queue=None, doc_refer=None, /) -> None:
 def multiprocessing_reader() -> list:
     """
     返回值是字典列表
-    {'identity': identity, 'data_frame': pd.DataFrame(), to_sql_df': pd.DataFrame(), 'mode': 'merge'/'substitute'/None}
+    {'identity': identity, 'doc_ref': doc_reference, 'data_frame': dataframe, 'to_sql_df': dataframe, 'mode': substitute/merge/None}
     :return:
     """
     global CPUS
@@ -296,18 +298,25 @@ def multiprocessing_reader() -> list:
     sql_reference = []
     for doc in st.DOC_REFERENCE:
         zzz = None
+        kkk = None
         for x in files_list:
             if x['identity'] == doc['identity']:
+                kkk = doc
                 if x['read_doc']:
                     zzz = doc
         if zzz is None:
-            sql_reference.append(doc)
+            if kkk is not None:
+                sql_reference.append(kkk)
         else:
             doc_reference.append(zzz)
     len_doc = len(doc_reference)
     if len_doc > 2:
         print('multiprocessing is initialized.')
-        pool = multiprocessing.Pool(CPUS)
+        if CPUS < (len_doc + 1) // 2:
+            cpus = CPUS
+        else:
+            cpus = (len_doc + 1) // 2
+        pool = multiprocessing.Pool(cpus)
         queue_ins = multiprocessing.Manager().Queue()
         for i in range(len_doc // 2):  # 每2个文档读取需求开启一个进程
             doc_group = [doc_reference[i * 2], doc_reference[i * 2 + 1]]
@@ -326,7 +335,9 @@ def multiprocessing_reader() -> list:
     while not queue_ins.empty():
         data_ins = queue_ins.get()
         data_ins_list.append(data_ins)
+    old_time = time.time()
     DocumentIO.update_to_sqlite(data_ins_list)  # 最后更新文件信息,避免干扰读取
+    print('写入sqlite耗时: ', time.time()-old_time)
     return data_ins_list
 
     # print('CPU_CORES: ', CPUS)
