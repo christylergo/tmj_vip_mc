@@ -15,7 +15,7 @@ MC_SALES_INTERVAL = 10
 placeholder = None
 # ---------------------文件夹路径(填写在引号内)-------------------------
 # 网上导出数据文件夹路径
-DOCS_PATH = r'C:\Users\Administrator\Desktop\tmj_vip_mc\vip_docs'
+DOCS_PATH = r'C:\Users\Administrator\Desktop\vip_docs'
 # 代码文件夹路径
 sys.path.append(r'C:\Users\Administrator\Desktop\tmj_vip_mc')
 # 库存显示方面的设置
@@ -153,8 +153,9 @@ COLUMN_PROPERTY.extend(vip_daily_sales_columns)
 
 doc_stock = [{
     'identity': warehouses[i].lower() + '_stock', 'name': '',
-    'key_words': '^[^虚拟].*' + warehouses_key_re[i] + '[^虚拟].*$', 'key_pos': ['商家编码', ], 'val_pos': ['可发库存', '可用库存'],
-    'val_type': ['INT', 'INT'],
+    'key_words': '^[^虚拟].*' + warehouses_key_re[i] + '[^虚拟].*$', 'key_pos': ['商家编码', ],
+    'val_pos': ['残次品', '可发库存', '可用库存'],
+    'val_type': ['TEXT', 'INT', 'INT'],
     'importance': 'optional', 'mode': None,
 } for i in range(0, len(warehouses))
 ]
@@ -162,8 +163,8 @@ doc_stock = [{
 doc_stock_virtual = [{
     'identity': warehouses[i].lower() + '_stock_virtual', 'name': '',
     'key_words': warehouses_key_re[i] + '.*虚拟|虚拟.*' + warehouses_key_re[i],
-    'key_pos': ['商家编码', ], 'val_pos': ['可发库存', '可用库存'],
-    'val_type': ['INT', 'INT'],
+    'key_pos': ['商家编码', ], 'val_pos': ['残次品', '可发库存', '可用库存'],
+    'val_type': ['TEXT', 'INT', 'INT'],
     'importance': 'optional', 'mode': None,
 } for i in range(0, len(warehouses))
 ]

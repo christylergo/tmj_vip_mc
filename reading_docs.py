@@ -135,12 +135,10 @@ class DocumentIO(threading.Thread):
                         file, engine='xlrd', usecols=lambda col: col in pd_cols,
                         dtype={x: str for x in self.doc_ref['key_pos']})  # 部分excel文件key_pos数据类型不是str, 强制转换
                     doc_df = pd.concat([doc_df, one_df], ignore_index=True, axis=0)
-        doc_df = doc_df.dropna()  # 剔除空行, 很重要
-        if self.from_sql == 'merge':
-            sales_date_head = datetime.datetime.today() - datetime.timedelta(days=st.VIP_SALES_INTERVAL)
-            date_col = self.doc_ref['key_pos'][1]
-            doc_df = doc_df.loc[lambda df: pd.to_datetime(
-                df[date_col]) >= sales_date_head, :]
+        doc_df = doc_df.dropna(subset=self.doc_ref['key_pos'], axis=0)  # 剔除空行, 很重要
+        row_count = doc_df.index.size
+        index = pd.MultiIndex.from_product([['doc_df'], range(row_count)], names=['source', 'serial_nu'])
+        doc_df.index = index
         return doc_df
 
     def read_sqlite(self) -> pd.DataFrame():
@@ -149,54 +147,34 @@ class DocumentIO(threading.Thread):
         pd_cols.extend(x)
         sql_constraint = ''
         if self.from_sql == 'merge':
-            sales_date_head = datetime.datetime.today() - datetime.timedelta(days=st.VIP_SALES_INTERVAL)
+            sales_date_head = datetime.date.today() - datetime.timedelta(days=st.VIP_SALES_INTERVAL)
             # vip和mc日销文件的date列名不同
-            sql_constraint = f" WHERE CAST({self.doc_ref['key_pos'][1]} AS DATETIME) >= '{sales_date_head}'"
+            sql_constraint = f" WHERE DATE({self.doc_ref['key_pos'][1]}) >= '{sales_date_head}';"
         self.mutex.acquire()
         conn = sqlite.connect(self.sql_db)
         # sqlite是单线程,不能线程共用一个conn
         # sql_cursor = conn.cursor()
-        # print(pd_cols, '**********')  # tiaoshi
         sql_query = f"SELECT {str.join(',', pd_cols)} FROM {self.identity}{sql_constraint}"
         # 要实现两个df的concat,两者的index列也要相同
         sql_df = pd.read_sql_query(sql_query, con=conn)
         conn.close()
         self.mutex.release()
+        row_count = sql_df.index.size
+        index = pd.MultiIndex.from_product([['sql_df'], range(row_count)], names=['source', 'serial_nu'])
+        sql_df.index = index
+        # print(sql_df.head())
         return sql_df
 
     def get_data(self) -> pd.DataFrame():
         if self.from_sql == 'merge':
             doc_df = self.read_doc()
             sql_df = self.read_sqlite()
-            sql_date = pd.DataFrame()
-            date_col = self.doc_ref['key_pos'][1]
-            if not doc_df.empty:
-                # 这个日期格式的针对性操作应该放进middleware里, 比较麻烦, 暂时不改了
-                if self.identity == 'mc_daily_sales':
-                    doc_df[date_col] = pd.to_datetime(doc_df[date_col]).dt.date
-                    doc_df[date_col] = doc_df[date_col].astype('str')
-                self.to_sql_df = doc_df
-            if not sql_df.empty:
-                if self.identity == 'mc_daily_sales':
-                    sql_df[date_col] = pd.to_datetime(sql_df[date_col]).dt.date
-                    sql_df[date_col] = sql_df[date_col].astype('str')
-                sql_date = sql_df.drop_duplicates(
-                    subset=[date_col], keep='first')[date_col]
             if not (doc_df.empty or sql_df.empty):
-                mask = [False if x in list(
-                    sql_date) else True for x in doc_df[date_col]]
-                doc_masked_df = doc_df[mask]
-                if doc_masked_df.empty:
-                    self.to_sql_df = None
-                    merged_df = sql_df
-                else:
-                    self.to_sql_df = doc_masked_df
-                    merged_df = pd.concat(
-                        [doc_masked_df, sql_df], ignore_index=True, keys=['doc', 'sqlite'])
+                merged_df = pd.concat([doc_df, sql_df], ignore_index=False)
                 return merged_df
             else:
                 # 从数据库中读取的的df为空时, 包含无效的index, 会在concat时报错, 避免使用
-                merged_df = doc_df if not doc_df.empty else sql_df
+                merged_df = sql_df if doc_df.empty else doc_df
                 return merged_df
         elif self.from_sql == 'substitute':
             sql_df = self.read_sqlite()
@@ -335,9 +313,6 @@ def multiprocessing_reader() -> list:
     while not queue_ins.empty():
         data_ins = queue_ins.get()
         data_ins_list.append(data_ins)
-    old_time = time.time()
-    DocumentIO.update_to_sqlite(data_ins_list)  # 最后更新文件信息,避免干扰读取
-    print('写入sqlite耗时: ', time.time()-old_time)
     return data_ins_list
 
     # print('CPU_CORES: ', CPUS)

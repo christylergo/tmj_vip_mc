@@ -21,6 +21,47 @@ class MiddlewareArsenal:
     'to_sql_df': sql_df, 'mode': self.from_sql}
     """
     @staticmethod
+    def __rectify_daily_sales(data_ins):
+        # 这个日期格式的针对性操作应该放进middleware里, 之前放在reading_docs里
+        sales_date_head = datetime.date.today() - datetime.timedelta(days=st.VIP_SALES_INTERVAL)
+        sales_date_tail = datetime.date.today()
+        date_col = data_ins['doc_ref']['key_pos'][1]
+        data_frame = data_ins['data_frame']
+        data_frame[date_col] = pd.to_datetime(data_frame[date_col]).dt.date
+        data_frame = data_frame.loc[lambda df: df[date_col] >= sales_date_head, :]
+        data_frame = data_frame[data_frame[date_col] < sales_date_tail]
+        # ---------------------------------------------
+        data_frame[date_col] = data_frame[date_col].astype('str')
+        # -----------------------------------------------
+        # 如果不先判断就进行筛选, 可能会报错
+        source = data_frame.index.get_level_values(0)
+        sql_df = data_frame.loc['sql_df'] if 'sql_df' in source else None
+        doc_df = data_frame.loc['doc_df'] if 'doc_df' in source else None
+        if sql_df is not None and doc_df is not None:
+            sql_date = sql_df.drop_duplicates(
+                subset=[date_col], keep='first')[date_col]
+            # pandas不要使用 for x in df的形式, 效率很低
+            # mask = [False if x in list(
+            #     sql_date) else True for x in doc_df[date_col]]
+            date_list = sql_date.to_list()
+            # 在numpy中扩展, 这样也是可行的
+            mask = ~doc_df[date_col].isin(date_list).to_numpy()
+            mask = np.hstack([mask, np.array([True]*sql_df.index.size)])
+            # 默认ascending=True, 默认使用quicksort, 稳定算法要选mergesort
+            data_frame = data_frame.sort_index(level=0, kind='mergesort')
+            data_frame = data_frame[mask]
+            source = data_frame.index.get_level_values(0)
+            doc_df = data_frame.loc['doc_df'] if 'doc_df' in source else None
+        to_sql_df = None
+        if doc_df is not None:
+            # 不需要reset index, 这个操作很耗时
+            # to_sql_df = doc_df.reset_index(drop=True)
+            to_sql_df = doc_df
+        data_frame = data_frame
+        return data_frame, to_sql_df
+
+    # --------------------------------------------------
+    @staticmethod
     def __pivot_daily_sales(data_ins):
         key_col = data_ins['doc_ref']['key_pos'][0]
         date_col = data_ins['doc_ref']['key_pos'][1]
@@ -37,33 +78,38 @@ class MiddlewareArsenal:
         data_frame = data_frame.reset_index()
         return data_frame
 
+    # ---------------------------------------------
     def mc_daily_sales(self, data_ins) -> None:
         while self is not None:
             print('eliminate the weak warnings')
-        origin_df = data_ins['data_frame']
+        origin_df, to_sql_df = MiddlewareArsenal.__rectify_daily_sales(data_ins)
         criteria_col = data_ins['doc_ref']['key_pos'][2]
         criterion = pd.concat(
             [origin_df[criteria_col] == 'SO0', origin_df[criteria_col] == 'SO4'], axis=1).any(axis=1)
         data_ins['data_frame'] = origin_df[criterion]
         pivoted_df = MiddlewareArsenal.__pivot_daily_sales(data_ins)
         data_ins['data_frame'] = pivoted_df
+        data_ins['to_sql_df'] = to_sql_df
 
+    # ------------------------------------------------
     def vip_daily_sales(self, data_ins) -> None:
         while self is not None:
             print('eliminate the weak warnings')
         # -----------------------------------------
+        origin_df, to_sql_df = MiddlewareArsenal.__rectify_daily_sales(data_ins)
         old_time = time.time()
         key_col = data_ins['doc_ref']['key_pos'][0]
         link_col = data_ins['doc_ref']['val_pos'][1]
-        origin_df = data_ins['data_frame']
         origin_df = origin_df[[key_col, link_col]]
         pivoted_df = MiddlewareArsenal.__pivot_daily_sales(data_ins)
-        print('pivot table 耗时: ', time.time() - old_time)
+        # print('pivot table 耗时: ', time.time() - old_time)
         old_time = time.time()
         merged_df = pd.merge(pivoted_df, origin_df, how='left', on=key_col)
         data_ins['data_frame'] = merged_df
-        print('left join 耗时: ', time.time() - old_time)
+        data_ins['to_sql_df'] = to_sql_df
+        # print('left join 耗时: ', time.time() - old_time)
 
+    # -------------------------------------------------
     def vip_routine_site_stock(self, data_ins) -> None:
         """
         剔除val_pos列中的无效值, 目前是"-"
@@ -74,35 +120,33 @@ class MiddlewareArsenal:
         data_frame = data_ins['data_frame']
         criterion = data_frame[val_col].map(lambda x: str(x).find('-') == -1)
         data_ins['data_frame'] = data_frame[criterion]
-        # print(data_ins['data_frame'].head())
 
-    def __warehouse_stock(self, data_ins) -> None:
+    # 这样首尾单下划线的名称结构可以避免和内部属性雷同造成混淆
+    def _warehouse_stock_(self, data_ins) -> None:
         while self is not None:
             print('eliminate the weak warnings')
-        pass
+        criteria_col = data_ins['doc_ref']['val_pos'][0]
+        data_frame = data_ins['data_frame']
+        data_ins['data_frame'] = data_frame[data_frame[criteria_col] != '是']
 
 
-#  以字典构建dataframe处理函数集合, 后续直接用各个df的identity来调用
+#  以字典构建dataframe处理函数集合, 后续直接用各个df的identity来调用,
+#  注意partial必须传递key argument的限制
 middleware_dict = MiddlewareArsenal.__dict__
 middleware_arsenal = {}
 for func_name, func in middleware_dict.items():
     if re.match(r'^(?=[^_])\w+(?<=[^_])$', func_name):  # 排除系统属性, 如果有大量的regular匹配需求, 最好先调用compile
-        middleware_func = functools.partial(func, self=None)
-        middleware_arsenal[func_name] = lambda x: middleware_func(data_ins=x)
-    if re.match(r'^(?=__)\w+(?<=[^_])$', func_name):
+        middleware_arsenal[func_name] = functools.partial(func, self=None)
+    if re.match(r'^(?=_[^_])\w*(?<=[^_]_)$', func_name):
         warehouse_func = functools.partial(func, self=None)
         stock_func_dict = {
-            warehouse.lower() + '_stock': lambda x: warehouse_func(data_ins=x)
+            warehouse.lower() + '_stock': warehouse_func
             for warehouse in st.warehouses}
         middleware_arsenal.update(stock_func_dict)
         virtual_stock_func_dict = {
-            warehouse.lower() + '_stock_virtual': lambda x: warehouse_func(data_ins=x)
+            warehouse.lower() + '_stock_virtual': warehouse_func
             for warehouse in st.warehouses}
         middleware_arsenal.update(virtual_stock_func_dict)
-
-
-# aaa = 123456
-# middleware_arsenal["mc_daily_sales"](data_ins=aaa)
 
 
 class AssemblyLines:
