@@ -1,8 +1,10 @@
+import os
 import sqlite3
 
 import settings as st
 
-sql_db = r'C:\Users\Administrator\Desktop\tmj_vip_mc\tmj_sqlite.db'
+sql_db = r'tmj_vip_mc\tmj_sqlite.db'
+sql_db = os.path.join(st.desktop, sql_db)
 sql_create_tmj_files_info = '''
     CREATE TABLE IF NOT EXISTS tmj_files_info
     (ID INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,

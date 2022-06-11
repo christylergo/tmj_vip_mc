@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import os
 import sys
 import win32con
 import win32api
@@ -15,7 +16,7 @@ MC_SALES_INTERVAL = 10
 placeholder = None
 # ---------------------文件夹路径(填写在引号内)-------------------------
 # 网上导出数据文件夹路径
-DOCS_PATH = r'C:\Users\Administrator\Desktop\vip_docs'
+DOCS_PATH = 'vip_docs'
 # 代码文件夹路径
 sys.path.append(r'C:\Users\Administrator\Desktop\tmj_vip_mc')
 # 库存显示方面的设置
@@ -243,3 +244,6 @@ def get_desktop() -> str:
         win32con.HKEY_CURRENT_USER, r'Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders', 0,
         win32con.KEY_READ)
     return win32api.RegQueryValueEx(desktop_key, 'Desktop')[0]
+
+desktop = get_desktop()
+DOCS_PATH = os.path.join(desktop, DOCS_PATH)

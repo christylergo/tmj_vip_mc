@@ -34,6 +34,7 @@ class MiddlewareArsenal:
         data_frame[date_col] = data_frame[date_col].astype('str')
         # -----------------------------------------------
         # 如果不先判断就进行筛选, 可能会报错
+        data_frame = data_frame.sort_index(level=0, kind='mergesort')
         source = data_frame.index.get_level_values(0)
         sql_df = data_frame.loc['sql_df'] if 'sql_df' in source else None
         doc_df = data_frame.loc['doc_df'] if 'doc_df' in source else None
@@ -48,7 +49,6 @@ class MiddlewareArsenal:
             mask = ~doc_df[date_col].isin(date_list).to_numpy()
             mask = np.hstack([mask, np.array([True]*sql_df.index.size)])
             # 默认ascending=True, 默认使用quicksort, 稳定算法要选mergesort
-            data_frame = data_frame.sort_index(level=0, kind='mergesort')
             data_frame = data_frame[mask]
             source = data_frame.index.get_level_values(0)
             doc_df = data_frame.loc['doc_df'] if 'doc_df' in source else None
