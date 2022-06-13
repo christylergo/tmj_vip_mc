@@ -20,6 +20,7 @@ class MiddlewareArsenal:
     data_ins = {'identity': self.identity, 'doc_ref': self.doc_ref, 'data_frame': data_frame,
     'to_sql_df': sql_df, 'mode': self.from_sql}
     """
+
     @staticmethod
     def __rectify_daily_sales(data_ins):
         # 这个日期格式的针对性操作应该放进middleware里, 之前放在reading_docs里
@@ -47,7 +48,7 @@ class MiddlewareArsenal:
             date_list = sql_date.to_list()
             # 在numpy中扩展, 这样也是可行的
             mask = ~doc_df[date_col].isin(date_list).to_numpy()
-            mask = np.hstack([mask, np.array([True]*sql_df.index.size)])
+            mask = np.hstack([mask, np.array([True] * sql_df.index.size)])
             # 默认ascending=True, 默认使用quicksort, 稳定算法要选mergesort
             data_frame = data_frame[mask]
             source = data_frame.index.get_level_values(0)
@@ -107,7 +108,7 @@ class MiddlewareArsenal:
         merged_df = pd.merge(pivoted_df, origin_df, how='left', on=key_col)
         data_ins['data_frame'] = merged_df
         data_ins['to_sql_df'] = to_sql_df
-        # print('left join 耗时: ', time.time() - old_time)
+        print('left join 耗时: ', time.time() - old_time)
 
     # -------------------------------------------------
     def vip_routine_site_stock(self, data_ins) -> None:
@@ -162,14 +163,24 @@ class AssemblyLines:
     class VipElementWiseStockInventory:
         """
         匹配每个唯品条码对应的各仓库存, 首先应把唯品条码map到tmj组合及单品.
-
+        data_ins = {'identity': self.identity, 'doc_ref': self.doc_ref, 'data_frame': data_frame,
+        'to_sql_df': sql_df, 'mode': self.from_sql}
         """
+        tmj_combination = None
+        tmj_atom = None
+        vip_fundamental_collections = None
 
         @classmethod
-        def assemble(cls):
-            pass
-
-        pass
+        def assemble(cls) -> pd.DataFrame():
+            master = cls.tmj_combination['data_frame']
+            slave = cls.vip_fundamental_collections['data_frame']
+            master_key = cls.tmj_combination['doc_ref']['key_pos'][0]
+            foreign_key = cls.vip_fundamental_collections['doc_ref']['key_pos'][1]
+            master = pd.merge(
+                master, slave, how='left', left_on=master_key, right_on=foreign_key
+            )
+            print(master.head())
+            return master
 
     class VipElementWiseDailySales:
 
@@ -179,7 +190,7 @@ class AssemblyLines:
 
         pass
 
-    class McElementWiseDailySales:
+    class MCElementWiseDailySales:
 
         @classmethod
         def assemble(cls):
@@ -196,9 +207,38 @@ class AssemblyLines:
         pass
 
     class VipNotes:
+        ccc = 100
+        ddd = 'good!'
 
         @classmethod
         def assemble(cls):
-            pass
+            print('vip_notes')
 
         pass
+
+    class FinalAssembly:
+        subassembly = None
+
+        @classmethod
+        def assemble(cls):
+            if cls.subassembly is None:
+                return None
+            pass
+
+
+for x in st.doc_stock_real_and_virtual:
+    setattr(AssemblyLines.VipElementWiseStockInventory, x['identity'], None)
+# ----------------------------------------------------------
+assembly_lines = {}
+for attr, attr_value in AssemblyLines.__dict__.items():
+    if re.match(r'^(?=[^_])\w+(?<=[^_])$', attr):
+        assembly_lines.update({attr: attr_value})
+#
+# aaa = assembly_lines['VipNotes']
+#
+# aaa.ddd = 'very good!'
+# eee = aaa.__dict__
+# print('ccc' in aaa.__dict__)
+# for x in assembly_lines:
+#     print(x)
+# aaa.assemble()

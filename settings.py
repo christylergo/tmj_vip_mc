@@ -5,20 +5,18 @@ import win32con
 import win32api
 import datetime
 
-
 # 表格生成后是否打开, True表示'是',False表示'否'
 SHOW_DOC_AFTER_GENERATED = True
 # 唯品销量显示的天数,1~30
-VIP_SALES_INTERVAL = 10
+VIP_SALES_INTERVAL = 16
 # 猫超销量的天数,1~30
-MC_SALES_INTERVAL = 10
+MC_SALES_INTERVAL = 16
 # 占位符,用于列簇层级结构
 placeholder = None
 # ---------------------文件夹路径(填写在引号内)-------------------------
 # 网上导出数据文件夹路径
 DOCS_PATH = 'vip_docs'
-# 代码文件夹路径
-sys.path.append(r'C:\Users\Administrator\Desktop\tmj_vip_mc')
+
 # 库存显示方面的设置
 warehouses = [
     'HanChuan', 'ChengDong', 'LingDing', 'YueZhong', 'LinDa', 'PiFa', 'KunShan', 'adjustment'
@@ -169,6 +167,9 @@ doc_stock_virtual = [{
     'importance': 'optional', 'mode': None,
 } for i in range(0, len(warehouses))
 ]
+doc_stock_real_and_virtual = []
+doc_stock_real_and_virtual.extend(doc_stock)
+doc_stock_real_and_virtual.extend(doc_stock_virtual)
 
 # 文件重要性的程度分为三类,'required'是必须的,'caution'是不必须,缺少的情况下会提示,'optional'是可选
 DOC_REFERENCE = [
@@ -245,5 +246,10 @@ def get_desktop() -> str:
         win32con.KEY_READ)
     return win32api.RegQueryValueEx(desktop_key, 'Desktop')[0]
 
+
 desktop = get_desktop()
 DOCS_PATH = os.path.join(desktop, DOCS_PATH)
+# 代码文件夹路径
+CODE_PATH = os.path.join(desktop, 'tmj_vip_mc')
+sys.path.append(CODE_PATH)
+
