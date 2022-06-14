@@ -6,11 +6,11 @@ def func(aa):
 
 
 ccc = ['a', 'b', 'c']
-
+fff = [1, 2]
 ddd = {x: func for x in ccc}
 ddd['a'](9)
 ddd['c'](100)
 
+fff.extend(ccc)
 
-
-print(aaa[1].keys())
+print(fff, ccc)

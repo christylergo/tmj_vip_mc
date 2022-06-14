@@ -17,7 +17,7 @@ if __name__ == '__main__':
     # ---------------------------------------------------------
     data_dict = {x['identity']: x for x in processed_data}
     assembled_data = {}
-    for inner_class in assembly_lines:
+    for _, inner_class in assembly_lines.items():
         for identity in data_dict:
             if identity in inner_class.__dict__:
                 setattr(inner_class, identity, data_dict[identity])

@@ -69,8 +69,7 @@ class MiddlewareArsenal:
         sales_col = data_ins['doc_ref']['val_pos'][0]
         data_frame = data_ins['data_frame']
         sales_date_head = datetime.datetime.today() - datetime.timedelta(days=st.VIP_SALES_INTERVAL)
-        data_frame = data_frame.loc[
-                     lambda df: pd.to_datetime(df[date_col]) >= sales_date_head, :]
+        data_frame = data_frame.loc[lambda df: pd.to_datetime(df[date_col]) >= sales_date_head, :]
         data_frame = pd.pivot_table(
             data_frame, index=[key_col], columns=[date_col], values=sales_col,
             aggfunc=np.sum, fill_value=0)  # 自定义agg func很便捷但是会严重降低运行速度, 所以尽量使用np.sum .mean等原生函数方法
@@ -127,7 +126,17 @@ class MiddlewareArsenal:
         while self is not None:
             print('eliminate the weak warnings')
         criteria_col = data_ins['doc_ref']['val_pos'][0]
+        available = data_ins['doc_ref']['val_pos'][1]
+        inventory = data_ins['doc_ref']['val_pos'][2]
         data_frame = data_ins['data_frame']
+        ref_cols = data_ins['doc_ref']['key_pos'].copy()
+        ref_cols.extend(data_ins['doc_ref']['val_pos'])
+        columns = data_frame.columns.to_list()
+        for ggg in ref_cols:  # 添加缺失列
+            if not (ggg in columns):
+                data_frame[ggg] = np.nan
+        data_frame = data_frame.fillna(999999)
+        data_frame[data_ins['identity']] = data_frame[[available, inventory]].apply(np.min, axis=1)
         data_ins['data_frame'] = data_frame[data_frame[criteria_col] != '是']
 
 
@@ -158,6 +167,8 @@ class AssemblyLines:
     主从索引都是identity, 通过内部类的类属性来定义操作method的实参
     所有的内部类的操作method统一命名为assemble, 因此内部类的method定义为class method会更方便调用.
     注: 不需要实例化此类, 直接调用类方法
+    data_ins = {'identity': self.identity, 'doc_ref': self.doc_ref, 'data_frame': data_frame,
+    'to_sql_df': sql_df, 'mode': self.from_sql}
     """
 
     class VipElementWiseStockInventory:
@@ -172,15 +183,45 @@ class AssemblyLines:
 
         @classmethod
         def assemble(cls) -> pd.DataFrame():
+            old_time = time.time()
             master = cls.tmj_combination['data_frame']
             slave = cls.vip_fundamental_collections['data_frame']
             master_key = cls.tmj_combination['doc_ref']['key_pos'][0]
-            foreign_key = cls.vip_fundamental_collections['doc_ref']['key_pos'][1]
-            master = pd.merge(
-                master, slave, how='left', left_on=master_key, right_on=foreign_key
-            )
-            print(master.head())
+            slave_key = cls.vip_fundamental_collections['doc_ref']['key_pos'][1]
+            master = pd.merge(master, slave, how='inner', left_on=master_key, right_on=slave_key)
+            slave = cls.tmj_atom['data_frame']
+            master_key = cls.tmj_combination['doc_ref']['val_pos'][2]
+            slave_key = str.join('_', [cls.tmj_atom['doc_ref']['key_pos'][0], cls.tmj_atom['identity']])
+            # inplace=True会直接在原dataframe上面修改, False在副本上修改并返回副本
+            slave = slave.rename(columns={cls.tmj_atom['doc_ref']['key_pos'][0]: slave_key}, inplace=False)
+            master = pd.merge(master, slave, how='left', left_on=master_key, right_on=slave_key)
+            attr_dict = cls.__dict__
+            for attribute in attr_dict:
+                if attr_dict[attribute] is None:
+                    continue
+                if re.match(r'^.*_stock.*$', attribute):
+                    stock_data = attr_dict[attribute]
+                    identity = stock_data['identity']
+                    master_key = cls.tmj_combination['doc_ref']['val_pos'][2]
+                    slave_key = str.join('_', [stock_data['doc_ref']['key_pos'][0], identity])
+                    slave = stock_data['data_frame']
+                    new_column_names = list(map(lambda aa: str.join('_', [aa, identity]), slave.columns[:-1]))
+                    new_column_names.append(slave.columns[-1])
+                    slave.columns = pd.Index(new_column_names)
+                    master = pd.merge(master, slave, how='left', left_on=master_key, right_on=slave_key)
+                    master.iloc[:, -1] = master.iloc[:, -1].fillna(0)
+                    master.iloc[:, -1] = (master.iloc[:, -1]/master.loc[:, '数量'].fillna(0)).astype(np.int)
+            # aaa = master.groupby(master_key)
+            ccc = time.time() - old_time
             return master
+
+    class VipElementWiseSiteStatus:
+
+        @classmethod
+        def assemble(cls):
+            pass
+
+        pass
 
     class VipElementWiseDailySales:
 
@@ -212,7 +253,7 @@ class AssemblyLines:
 
         @classmethod
         def assemble(cls):
-            print('vip_notes')
+            pass
 
         pass
 
@@ -230,15 +271,7 @@ for x in st.doc_stock_real_and_virtual:
     setattr(AssemblyLines.VipElementWiseStockInventory, x['identity'], None)
 # ----------------------------------------------------------
 assembly_lines = {}
-for attr, attr_value in AssemblyLines.__dict__.items():
-    if re.match(r'^(?=[^_])\w+(?<=[^_])$', attr):
-        assembly_lines.update({attr: attr_value})
-#
-# aaa = assembly_lines['VipNotes']
-#
-# aaa.ddd = 'very good!'
-# eee = aaa.__dict__
-# print('ccc' in aaa.__dict__)
-# for x in assembly_lines:
-#     print(x)
-# aaa.assemble()
+for attr_name, attr_value in AssemblyLines.__dict__.items():
+    if re.match(r'^(?=[^_])\w+(?<=[^_])$', attr_name):
+        assembly_lines.update({attr_name: attr_value})
+
