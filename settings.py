@@ -8,9 +8,9 @@ import datetime
 # 表格生成后是否打开, True表示'是',False表示'否'
 SHOW_DOC_AFTER_GENERATED = True
 # 唯品销量显示的天数,1~30
-VIP_SALES_INTERVAL = 16
+VIP_SALES_INTERVAL = 20
 # 猫超销量的天数,1~30
-MC_SALES_INTERVAL = 16
+MC_SALES_INTERVAL = 20
 # 占位符,用于列簇层级结构
 placeholder = None
 # ---------------------文件夹路径(填写在引号内)-------------------------
@@ -191,7 +191,7 @@ DOC_REFERENCE = [
     },
     {
         'identity': 'vip_fundamental_collections', 'name': '',  # 唯品总货表
-        'key_words': '唯品会十月总货表', 'key_pos': ['唯品后台条码', '旺店通条码'],
+        'key_words': '唯品会十月总货表', 'key_pos': ['唯品后台条码', '旺店通条码', ],
         'val_pos': ['类别', '商品名称', '唯品会货号', '日常券', '自主分类'], 'val_type': ['TEXT', 'TEXT', 'TEXT', 'TEXT', 'TEXT'],
         'importance': 'required', 'mode': None,
     },

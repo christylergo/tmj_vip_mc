@@ -70,11 +70,16 @@ class MiddlewareArsenal:
         data_frame = data_ins['data_frame']
         sales_date_head = datetime.datetime.today() - datetime.timedelta(days=st.VIP_SALES_INTERVAL)
         data_frame = data_frame.loc[lambda df: pd.to_datetime(df[date_col]) >= sales_date_head, :]
+        if data_frame.empty:
+            return data_frame
         data_frame = pd.pivot_table(
             data_frame, index=[key_col], columns=[date_col], values=sales_col,
             aggfunc=np.sum, fill_value=0)  # 自定义agg func很便捷但是会严重降低运行速度, 所以尽量使用np.sum .mean等原生函数方法
         data_frame = data_frame.applymap(func=abs)
-        data_frame.columns = data_frame.columns.map(lambda x: f"{pd.to_datetime(x):%m/%d}")
+        data_frame.columns = data_frame.columns.map(lambda xx: f"{pd.to_datetime(xx):%m/%d}")
+        # 注意iloc的筛选方式, 两端都是闭区间
+        data_frame['week_sales'] = data_frame.iloc[:, -1:-7:-1].apply(np.sum, axis=1)
+        data_frame.astype(np.int, copy=False)
         data_frame = data_frame.reset_index()
         return data_frame
 
@@ -170,6 +175,19 @@ class AssemblyLines:
     data_ins = {'identity': self.identity, 'doc_ref': self.doc_ref, 'data_frame': data_frame,
     'to_sql_df': sql_df, 'mode': self.from_sql}
     """
+    @classmethod
+    def combine_df__(cls, master=None, slave=None, mapping=None) -> pd.DataFrame():
+        if mapping is None:
+            return None
+        slave_copy = pd.DataFrame(columns=master.columns.to_list())
+        for xx in mapping:
+            if xx[1] is np.nan:
+                slave_copy.iloc[:, xx[0]] = np.nan
+            else:
+                slave_copy.iloc[:, xx[0]] = slave.iloc[:, xx[1]]
+        merged_df = pd.concat([master, slave_copy], ignore_index=True)
+        merged_df.fillna(value=1, inplace=True)
+        return merged_df
 
     class VipElementWiseStockInventory:
         """
@@ -184,7 +202,10 @@ class AssemblyLines:
         @classmethod
         def assemble(cls) -> pd.DataFrame():
             old_time = time.time()
+            mapping = [(0, 0), (1, 2), (2, 1), (3, 0), (4, np.nan)]
             master = cls.tmj_combination['data_frame']
+            slave = cls.tmj_atom['data_frame']
+            master = AssemblyLines.combine_df__(master, slave, mapping)
             slave = cls.vip_fundamental_collections['data_frame']
             master_key = cls.tmj_combination['doc_ref']['key_pos'][0]
             slave_key = cls.vip_fundamental_collections['doc_ref']['key_pos'][1]
@@ -211,49 +232,58 @@ class AssemblyLines:
                     master = pd.merge(master, slave, how='left', left_on=master_key, right_on=slave_key)
                     master.iloc[:, -1] = master.iloc[:, -1].fillna(0)
                     master.iloc[:, -1] = (master.iloc[:, -1]/master.loc[:, '数量'].fillna(0)).astype(np.int)
-            # aaa = master.groupby(master_key)
-            ccc = time.time() - old_time
+            # old_time = time.time()
+            # aaa = master.groupby(cls.tmj_combination['doc_ref']['key_pos'][0])
+            # eee = aaa['货品名称'].transform(';'.join)
+            # ccc = time.time() - old_time
             return master
 
     class VipElementWiseSiteStatus:
+        """
+        汇总整合vip线上表格信息, element key是唯品条码
+        """
+        vip_fundamental_collections = None
+        vip_daily_sales = None
+        vip_routine_operation = None
+        vip_routine_site_stock = None
 
         @classmethod
         def assemble(cls):
-            pass
-
-        pass
-
-    class VipElementWiseDailySales:
-
-        @classmethod
-        def assemble(cls):
-            pass
-
-        pass
+            slave_list = [cls.vip_routine_operation, cls.vip_routine_site_stock, cls.vip_daily_sales]
+            master = cls.vip_fundamental_collections['data_frame']
+            master_key = cls.vip_fundamental_collections['doc_ref']['key_pos'][0]
+            for slave_data in slave_list:
+                slave = slave_data['data_frame']
+                slave_key = slave_data['doc_ref']['key_pos'][0]
+                master = pd.merge(master, slave, how='left', left_on=master_key, right_on=slave_key)
+            return master
 
     class MCElementWiseDailySales:
+        """
+        整合猫超销售数据, 以单品商家编码与唯品表格建立关联
+        """
+        mc_item = None
+        mc_daily_sales = None
+        tmj_combination = None
+        tmj_atom = None
 
         @classmethod
         def assemble(cls):
-            pass
-
-        pass
-
-    class VipCombinedWithMc:
-
-        @classmethod
-        def assemble(cls):
+            mapping = [(0, 0), (1, 2), (2, 1), (3, 0), (4, np.nan)]
+            master = cls.tmj_combination['data_frame']
+            slave = cls.tmj_atom['data_frame']
+            master = AssemblyLines.combine_df__(master, slave, mapping)
             pass
 
         pass
 
     class VipNotes:
-        ccc = 100
-        ddd = 'good!'
+        subassembly = None
 
         @classmethod
         def assemble(cls):
-            pass
+            if cls.subassembly is None:
+                return None
 
         pass
 
@@ -275,3 +305,4 @@ for attr_name, attr_value in AssemblyLines.__dict__.items():
     if re.match(r'^(?=[^_])\w+(?<=[^_])$', attr_name):
         assembly_lines.update({attr_name: attr_value})
 
+pass

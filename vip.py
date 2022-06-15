@@ -23,6 +23,9 @@ if __name__ == '__main__':
                 setattr(inner_class, identity, data_dict[identity])
         df = inner_class.assemble()
         assembled_data.update({inner_class: df})
+    vip_notes = assembly_lines['VipNotes']
+    vip_notes.subassembly = assembled_data
+    assembled_data = vip_notes.assemble()
     final_assembly = assembly_lines['FinalAssembly']
     final_assembly.subassembly = assembled_data
-    final_data = final_assembly.assemble()
+    final_assembled_data = final_assembly.assemble()
