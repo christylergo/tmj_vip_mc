@@ -170,12 +170,12 @@ class DocumentIO(threading.Thread):
             doc_df = self.read_doc()
             sql_df = self.read_sqlite()
             if not (doc_df.empty or sql_df.empty):
-                merged_df = pd.concat([doc_df, sql_df], ignore_index=False)
-                return merged_df
+                df = pd.concat([doc_df, sql_df], ignore_index=False)
+                return df
             else:
                 # 从数据库中读取的的df为空时, 包含无效的index, 会在concat时报错, 避免使用
-                merged_df = sql_df if doc_df.empty else doc_df
-                return merged_df
+                df = sql_df if doc_df.empty else doc_df
+                return df
         elif self.from_sql == 'substitute':
             sql_df = self.read_sqlite()
             return sql_df

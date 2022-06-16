@@ -220,10 +220,7 @@ DOC_REFERENCE = [
     {
         'identity': 'vip_bench_player', 'name': '',
         'key_words': '替换|替代|备选', 'key_pos': ['商家编码_首发', ],
-        'val_pos': [
-            '商家编码_替代1', '商家编码_替代2', '商家编码_替代3', '商家编码_替代4',
-            '交换比_替代1', '交换比_替代2', '交换比_替代3', '交换比_替代4'],  # 交换比是指一个替代品可以替换多少个首发商品
-        'val_type': ['TEXT', 'TEXT', 'TEXT', 'TEXT', 'REAL', 'REAL', 'REAL', 'REAL', ],
+        'val_pos': ['商家编码_备选', '交换比'], 'val_type': ['TEXT', 'REAL', ],  # 交换比是指一个替代品可以替换多少个首发商品
         'importance': 'optional', 'mode': None,
     },
     {

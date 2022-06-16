@@ -185,9 +185,9 @@ class AssemblyLines:
                 slave_copy.iloc[:, xx[0]] = np.nan
             else:
                 slave_copy.iloc[:, xx[0]] = slave.iloc[:, xx[1]]
-        merged_df = pd.concat([master, slave_copy], ignore_index=True)
-        merged_df.fillna(value=1, inplace=True)
-        return merged_df
+        df = pd.concat([master, slave_copy], ignore_index=True)
+        df.fillna(value=1, inplace=True)
+        return df
 
     class VipElementWiseStockInventory:
         """
@@ -198,6 +198,7 @@ class AssemblyLines:
         tmj_combination = None
         tmj_atom = None
         vip_fundamental_collections = None
+        vip_bench_player = None
 
         @classmethod
         def assemble(cls) -> pd.DataFrame():
@@ -210,6 +211,10 @@ class AssemblyLines:
             master_key = cls.tmj_combination['doc_ref']['key_pos'][0]
             slave_key = cls.vip_fundamental_collections['doc_ref']['key_pos'][1]
             master = pd.merge(master, slave, how='inner', left_on=master_key, right_on=slave_key)
+            master_key = cls.tmj_combination['doc_ref']['val_pos'][2]
+            slave = cls.vip_bench_player['data_frame']
+            slave_key = cls.vip_bench_player['doc_ref']['key_pos'][0]
+            bench_player = pd.merge(master, slave, how='inner', left_on=master_key, right_on=slave_key)
             slave = cls.tmj_atom['data_frame']
             master_key = cls.tmj_combination['doc_ref']['val_pos'][2]
             slave_key = str.join('_', [cls.tmj_atom['doc_ref']['key_pos'][0], cls.tmj_atom['identity']])
@@ -273,9 +278,23 @@ class AssemblyLines:
             master = cls.tmj_combination['data_frame']
             slave = cls.tmj_atom['data_frame']
             master = AssemblyLines.combine_df__(master, slave, mapping)
-            pass
-
-        pass
+            master_key = cls.tmj_combination['doc_ref']['key_pos'][0]
+            slave = cls.mc_item['data_frame']
+            slave_key = cls.mc_item['doc_ref']['key_pos'][1]
+            master = pd.merge(master, slave, how='inner', left_on=master_key, right_on=slave_key)
+            master_key = cls.mc_item['doc_ref']['key_pos'][0]
+            slave = cls.mc_daily_sales['data_frame']
+            slave_key = cls.mc_daily_sales['doc_ref']['key_pos'][0]
+            master = pd.merge(master, slave, how='left', left_on=master_key, right_on=slave_key)
+            master.iloc[:, -1].fillna(value=0, inplace=True)
+            master.iloc[:, -1] = master.iloc[:, -1]*master['数量']
+            by_key = cls.tmj_combination['doc_ref']['val_pos'][2]
+            master.sort_values(by=[by_key], axis=0, ignore_index=True, inplace=True)
+            master.iloc[:, -1] = master.groupby(by=[by_key]).week_sales.transform(np.sum)
+            master = master.loc[:, by_key:].iloc[:, [0, -1]]
+            subset = master.columns[0]
+            master.drop_duplicates(subset=subset, keep='first', inplace=True, ignore_index=True)
+            return master
 
     class VipNotes:
         subassembly = None
@@ -304,5 +323,3 @@ assembly_lines = {}
 for attr_name, attr_value in AssemblyLines.__dict__.items():
     if re.match(r'^(?=[^_])\w+(?<=[^_])$', attr_name):
         assembly_lines.update({attr_name: attr_value})
-
-pass
