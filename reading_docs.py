@@ -237,6 +237,7 @@ class DocumentIO(threading.Thread):
                         # 把最新的文件信息写进sqlite中,用于下一次比对,旧信息全部删除.
                         cursor.execute(
                             f"DELETE FROM tmj_files_info WHERE identity = '{file['identity']}';")
+                print('have written data to sqlite ...')
         #  --------------------------------
         cursor.executemany(
             "INSERT INTO tmj_files_info(identity, file_name, file_mtime) VALUES(?,?,?);", query_data)
@@ -288,7 +289,7 @@ def multiprocessing_reader() -> list:
         else:
             doc_reference.append(zzz)
     len_doc = len(doc_reference)
-    if len_doc > 2:
+    if len_doc > 1:
         print('multiprocessing is initialized.')
         if CPUS < (len_doc + 1) // 2:
             cpus = CPUS

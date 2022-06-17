@@ -22,10 +22,11 @@ if __name__ == '__main__':
             if identity in inner_class.__dict__:
                 setattr(inner_class, identity, data_dict[identity])
         df = inner_class.assemble()
-        assembled_data.update({inner_class: df})
+        assembled_data.update({_: df})
     vip_notes = assembly_lines['VipNotes']
-    vip_notes.subassembly = assembled_data
-    assembled_data = vip_notes.assemble()
+    # vip_notes.subassembly = assembled_data  # 这个方式的赋值操作会无效, 暂不能理解, 所以使用setattr方法
+    setattr(vip_notes, 'subassembly', assembled_data)
+    noted_data = vip_notes.assemble()
     final_assembly = assembly_lines['FinalAssembly']
-    final_assembly.subassembly = assembled_data
+    setattr(final_assembly, 'subassembly', noted_data)
     final_assembled_data = final_assembly.assemble()

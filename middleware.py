@@ -77,7 +77,7 @@ class MiddlewareArsenal:
             aggfunc=np.sum, fill_value=0)  # 自定义agg func很便捷但是会严重降低运行速度, 所以尽量使用np.sum .mean等原生函数方法
         data_frame = data_frame.applymap(func=abs)
         data_frame.columns = data_frame.columns.map(lambda xx: f"{pd.to_datetime(xx):%m/%d}")
-        # 注意iloc的筛选方式, 两端都是闭区间
+        # 注意df的切片方式, 两端都是闭区间, python的切片左闭右开
         data_frame['week_sales'] = data_frame.iloc[:, -1:-7:-1].apply(np.sum, axis=1)
         data_frame.astype(np.int, copy=False)
         data_frame = data_frame.reset_index()
@@ -107,24 +107,38 @@ class MiddlewareArsenal:
         link_col = data_ins['doc_ref']['val_pos'][1]
         origin_df = origin_df[[key_col, link_col]]
         pivoted_df = MiddlewareArsenal.__pivot_daily_sales(data_ins)
-        # print('pivot table 耗时: ', time.time() - old_time)
-        old_time = time.time()
-        merged_df = pd.merge(pivoted_df, origin_df, how='left', on=key_col)
-        data_ins['data_frame'] = merged_df
+        df = pd.merge(pivoted_df, origin_df, how='left', on=key_col)
+        df.drop_duplicates(subset=key_col, keep='first', inplace=True, ignore_index=True)
+        data_ins['data_frame'] = df
         data_ins['to_sql_df'] = to_sql_df
-        print('left join 耗时: ', time.time() - old_time)
+        # print('left join 耗时: ', time.time() - old_time)
 
-    # -------------------------------------------------
+    # --------------------------------------------------
+    def tmj_combination(self, data_ins):
+        """
+        添加辅助构建bench player货品与主货品映射关系的列
+        """
+        while self is not None:
+            print('eliminate the weak warnings')
+        df = data_ins['data_frame']
+        df['bp_mapping'] = df[data_ins['doc_ref']['val_pos'][2]]
+        data_ins['data_frame'] = df
+
+    # --------------------------------------------------
     def vip_routine_site_stock(self, data_ins) -> None:
         """
         剔除val_pos列中的无效值, 目前是"-"
         """
         while self is not None:
             print('eliminate the weak warnings')
+        key_col = data_ins['doc_ref']['key_pos'][0]
         val_col = data_ins['doc_ref']['val_pos'][0]
         data_frame = data_ins['data_frame']
-        criterion = data_frame[val_col].map(lambda x: str(x).find('-') == -1)
-        data_ins['data_frame'] = data_frame[criterion]
+        criterion = data_frame[val_col].map(lambda xx: str(xx).find('-') == -1)
+        # 注意不要在切片或者视图上执行drop等操作
+        df = data_frame[criterion].copy()
+        df.drop_duplicates(subset=key_col, keep='first', inplace=True, ignore_index=True)
+        data_ins['data_frame'] = df
 
     # 这样首尾单下划线的名称结构可以避免和内部属性雷同造成混淆
     def _warehouse_stock_(self, data_ins) -> None:
@@ -203,7 +217,7 @@ class AssemblyLines:
         @classmethod
         def assemble(cls) -> pd.DataFrame():
             old_time = time.time()
-            mapping = [(0, 0), (1, 2), (2, 1), (3, 0), (4, np.nan)]
+            mapping = [(0, 0), (1, 2), (2, 1), (3, 0), (4, np.nan), (5, 0)]
             master = cls.tmj_combination['data_frame']
             slave = cls.tmj_atom['data_frame']
             master = AssemblyLines.combine_df__(master, slave, mapping)
@@ -211,16 +225,36 @@ class AssemblyLines:
             master_key = cls.tmj_combination['doc_ref']['key_pos'][0]
             slave_key = cls.vip_fundamental_collections['doc_ref']['key_pos'][1]
             master = pd.merge(master, slave, how='inner', left_on=master_key, right_on=slave_key)
+            # -----------------加入替换货品的信息--------------------------
             master_key = cls.tmj_combination['doc_ref']['val_pos'][2]
             slave = cls.vip_bench_player['data_frame']
             slave_key = cls.vip_bench_player['doc_ref']['key_pos'][0]
             bench_player = pd.merge(master, slave, how='inner', left_on=master_key, right_on=slave_key)
-            slave = cls.tmj_atom['data_frame']
+            i = cls.tmj_combination['doc_ref']['val_pos'][3]
+            j = cls.vip_bench_player['doc_ref']['val_pos'][-1]
+            bench_player[i] = bench_player[i] * bench_player[j]
+            # 把用于替换的单品商品编码放在组合的单品商品编码位置, 以此mapping各仓库存
+            i = cls.tmj_combination['doc_ref']['val_pos'][2]
+            j = cls.vip_bench_player['doc_ref']['val_pos'][0]
+            bench_player[i] = bench_player[j]
+            i = cls.vip_fundamental_collections['doc_ref']['val_pos'][-2]
+            master[i] = 'starter'
+            bench_player[i] = 'bench_player'
+            bench_player = bench_player[master.columns.to_list()]
+            master = pd.concat([master, bench_player], ignore_index=True)
+            # ---------------------------------------------------------------
             master_key = cls.tmj_combination['doc_ref']['val_pos'][2]
+            slave = cls.tmj_atom['data_frame']
             slave_key = str.join('_', [cls.tmj_atom['doc_ref']['key_pos'][0], cls.tmj_atom['identity']])
             # inplace=True会直接在原dataframe上面修改, False在副本上修改并返回副本
             slave = slave.rename(columns={cls.tmj_atom['doc_ref']['key_pos'][0]: slave_key}, inplace=False)
-            master = pd.merge(master, slave, how='left', left_on=master_key, right_on=slave_key)
+            master = pd.merge(
+                master, slave, how='left', left_on=master_key, right_on=slave_key, validate='many_to_one')
+            i = cls.tmj_atom['doc_ref']['val_pos'][-1]
+            j = cls.tmj_combination['doc_ref']['val_pos'][3]
+            master[i] = master[i] * master[j]
+            i = cls.tmj_atom['doc_ref']['val_pos'][-2]
+            master[i] = master[i] * master[j]
             attr_dict = cls.__dict__
             for attribute in attr_dict:
                 if attr_dict[attribute] is None:
@@ -234,13 +268,10 @@ class AssemblyLines:
                     new_column_names = list(map(lambda aa: str.join('_', [aa, identity]), slave.columns[:-1]))
                     new_column_names.append(slave.columns[-1])
                     slave.columns = pd.Index(new_column_names)
-                    master = pd.merge(master, slave, how='left', left_on=master_key, right_on=slave_key)
-                    master.iloc[:, -1] = master.iloc[:, -1].fillna(0)
-                    master.iloc[:, -1] = (master.iloc[:, -1]/master.loc[:, '数量'].fillna(0)).astype(np.int)
-            # old_time = time.time()
-            # aaa = master.groupby(cls.tmj_combination['doc_ref']['key_pos'][0])
-            # eee = aaa['货品名称'].transform(';'.join)
-            # ccc = time.time() - old_time
+                    master = pd.merge(
+                        master, slave, how='left', left_on=master_key, right_on=slave_key, validate='many_to_one')
+                    master.iloc[:, -1].fillna(value=0, inplace=True)
+                    master.iloc[:, -1] = (master.iloc[:, -1]/master[j]).astype(np.int)
             return master
 
     class VipElementWiseSiteStatus:
@@ -260,10 +291,11 @@ class AssemblyLines:
             for slave_data in slave_list:
                 slave = slave_data['data_frame']
                 slave_key = slave_data['doc_ref']['key_pos'][0]
-                master = pd.merge(master, slave, how='left', left_on=master_key, right_on=slave_key)
+                master = pd.merge(
+                    master, slave, how='left', left_on=master_key, right_on=slave_key, validate='many_to_one')
             return master
 
-    class MCElementWiseDailySales:
+    class McElementWiseDailySales:
         """
         整合猫超销售数据, 以单品商家编码与唯品表格建立关联
         """
@@ -297,14 +329,51 @@ class AssemblyLines:
             return master
 
     class VipNotes:
+        """
+        保留dataframe完整, 只添加必要的备注, 这个操作涉及较多的
+        group by以及str.join, 是个耗时操作, 操作对象是前几步整合的dataframe
+        """
         subassembly = None
 
         @classmethod
         def assemble(cls):
             if cls.subassembly is None:
                 return None
+            doc_ref = {xx['identity']: xx for xx in st.DOC_REFERENCE}
+            stock_inventory = cls.subassembly['VipElementWiseStockInventory']
+            site_status = cls.subassembly['VipElementWiseSiteStatus']
+            mc_sales = cls.subassembly['McElementWiseDailySales']
+            vip_site_key = doc_ref['vip_fundamental_collections']['key_pos'][0]
+            vip_stock_key = doc_ref['vip_fundamental_collections']['key_pos'][1]
+            tmj_atom_key = doc_ref['tmj_combination']['val_pos'][2]
+            # -----------------------------------------------------------------------
+            master = pd.merge(stock_inventory, mc_sales, how='left', on=tmj_atom_key, validate='many_to_one')
+            master.rename(columns={'week_sales': 'mc_week_sales'}, inplace=True)
+            master['platform'] = master['mc_week_sales']
+            master['platform'] = np.where(master['platform'].isna(), 0, 1)
+            i = doc_ref['vip_fundamental_collections']['val_pos'][3]
+            group = master.groupby(by=[vip_stock_key, i])
+            master['platform'] = group.platform.transform(np.sum)
+            master['platform'] = np.where(master['platform'] == 0, '唯品', '共用')
+            master['mc_week_sales'].fillna(value=0, inplace=True)
+            i = doc_ref['tmj_combination']['val_pos'][3]
+            master['mc_week_sales'] = master['mc_week_sales'] / master[i]
+            master['mc_week_sales'] = group.mc_week_sales.transform(np.max)
+            # -----------------------------------------------------------------------
+            i = doc_ref['tmj_atom']['val_pos'][3]
+            master[i] = group[i].transform(np.sum)
+            i = doc_ref['tmj_atom']['val_pos'][4]
+            master[i] = group[i].transform(np.sum)
+            # -----------------------------------------------------------------------
+            bp_group = master.groupby(by=[vip_stock_key, 'bp_mapping'])
+            stock_list = []
+            for xx in st.doc_stock_real_and_virtual:
+                if xx['identity'] in master.columns.to_list():
+                    xxx = xx['identity'] + '_notes'
+                    master[xxx] = np.nan
+                    stock_list.append(xxx)
 
-        pass
+            pass
 
     class FinalAssembly:
         subassembly = None
@@ -313,7 +382,7 @@ class AssemblyLines:
         def assemble(cls):
             if cls.subassembly is None:
                 return None
-            pass
+            doc_ref = {xx['identity']: xx for xx in st.DOC_REFERENCE}
 
 
 for x in st.doc_stock_real_and_virtual:
