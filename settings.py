@@ -11,6 +11,10 @@ SHOW_DOC_AFTER_GENERATED = True
 VIP_SALES_INTERVAL = 20
 # 猫超销量的天数,1~30
 MC_SALES_INTERVAL = 20
+# 触发备注提示的周转天数阈值, 低于此值会备注提示
+DSI_THRESHOLD = 3
+# 触发备注提示的主仓库存阈值, 低于此值会备注提示
+INVENTORY_THRESHOLD = 20
 # 占位符,用于列簇层级结构
 placeholder = None
 # ---------------------文件夹路径(填写在引号内)-------------------------
@@ -21,9 +25,8 @@ DOCS_PATH = 'vip_docs'
 warehouses = [
     'HanChuan', 'ChengDong', 'LingDing', 'YueZhong', 'LinDa', 'PiFa', 'KunShan', 'adjustment'
 ]
-warehouses_key_name = ['汉川', '城东', '岭顶', '越中', '琳达', '批发', '昆山', '修正']
 # 下面这行列出来的是各个库存文件名称的关键字,用于识别是哪个仓的库存
-warehouses_key_re = ['汉川', '城东', '岭顶', '越中', '琳达', '批发', '昆山', '修正']
+warehouses_key_name = ['汉川', '城东', '岭顶', '越中', '琳达', '批发', '昆山', '修正']
 
 # 各仓显示优先级,数字越小显示越靠前, True表示显示此列，False表示不显示
 WAREHOUSE_PRIORITY = {
@@ -83,8 +86,10 @@ DAILY_SALES_WEEK = zip(daily_sales_week_title, daily_sales_week_priority)
 FEATURE_PRIORITY.update(DAILY_SALES_WEEK)
 
 WAREHOUSE_PRIORITY_REAL_VIRTUAL = ({
-    warehouses[i] + '_virtual': [WAREHOUSE_PRIORITY[warehouses[i]][0] + 1, WAREHOUSE_PRIORITY[warehouses[i]][1]],
-    warehouses[i]: [WAREHOUSE_PRIORITY[warehouses[i]][0] + 2, WAREHOUSE_PRIORITY[warehouses[i]][1]],
+    warehouses[i].lower() + '_stock_virtual': [
+        WAREHOUSE_PRIORITY[warehouses[i]][0] + 1, WAREHOUSE_PRIORITY[warehouses[i]][1]],
+    warehouses[i].lower() + '_stock': [
+        WAREHOUSE_PRIORITY[warehouses[i]][0] + 2, WAREHOUSE_PRIORITY[warehouses[i]][1]],
 } for i in range(0, len(warehouses))
 )
 
@@ -135,14 +140,14 @@ vip_daily_sales_columns = [{
 } for i in range(0, VIP_SALES_INTERVAL)]
 
 warehouses_stock = [{
-    'identity': warehouses[i], 'name': warehouses_key_name[i] + '仓库存',
-    'refer_doc': warehouses[i].lower() + '_stock', 'floating_title': ['可发库存', '可用库存']
+    'identity': warehouses[i].lower() + '_stock', 'name': warehouses_key_name[i] + '仓库存',
+    'refer_doc': warehouses[i].lower() + '_stock', 'floating_title': [warehouses[i].lower() + '_stock']
 } for i in range(0, len(warehouses))
 ]
 
 warehouses_stock_virtual = [{
-    'identity': warehouses[i] + '_virtual', 'name': warehouses_key_name[i] + '虚拟仓库存',
-    'refer_doc': warehouses[i].lower() + '_stock_virtual', 'floating_title': ['可发库存', '可用库存']
+    'identity': warehouses[i].lower() + '_stock_virtual', 'name': warehouses_key_name[i] + '虚拟仓库存',
+    'refer_doc': warehouses[i].lower() + '_stock_virtual', 'floating_title': [warehouses[i].lower() + '_stock_virtual']
 } for i in range(0, len(warehouses))
 ]
 
@@ -152,7 +157,7 @@ COLUMN_PROPERTY.extend(vip_daily_sales_columns)
 
 doc_stock = [{
     'identity': warehouses[i].lower() + '_stock', 'name': '',
-    'key_words': '^[^虚拟].*' + warehouses_key_re[i] + '[^虚拟].*$', 'key_pos': ['商家编码', ],
+    'key_words': '^[^虚拟].*' + warehouses_key_name[i] + '[^虚拟].*$', 'key_pos': ['商家编码', ],
     'val_pos': ['残次品', '可发库存', '可用库存'],
     'val_type': ['TEXT', 'INT', 'INT'],
     'importance': 'optional', 'mode': None,
@@ -161,7 +166,7 @@ doc_stock = [{
 
 doc_stock_virtual = [{
     'identity': warehouses[i].lower() + '_stock_virtual', 'name': '',
-    'key_words': warehouses_key_re[i] + '.*虚拟|虚拟.*' + warehouses_key_re[i],
+    'key_words': warehouses_key_name[i] + '.*虚拟|虚拟.*' + warehouses_key_name[i],
     'key_pos': ['商家编码', ], 'val_pos': ['残次品', '可发库存', '可用库存'],
     'val_type': ['TEXT', 'INT', 'INT'],
     'importance': 'optional', 'mode': None,

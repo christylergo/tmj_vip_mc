@@ -189,6 +189,7 @@ class AssemblyLines:
     data_ins = {'identity': self.identity, 'doc_ref': self.doc_ref, 'data_frame': data_frame,
     'to_sql_df': sql_df, 'mode': self.from_sql}
     """
+
     @classmethod
     def combine_df__(cls, master=None, slave=None, mapping=None) -> pd.DataFrame():
         if mapping is None:
@@ -238,8 +239,8 @@ class AssemblyLines:
             j = cls.vip_bench_player['doc_ref']['val_pos'][0]
             bench_player[i] = bench_player[j]
             i = cls.vip_fundamental_collections['doc_ref']['val_pos'][-2]
-            master[i] = 'starter'
-            bench_player[i] = 'bench_player'
+            master['bp_criteria'] = False
+            bench_player['bp_criteria'] = True
             bench_player = bench_player[master.columns.to_list()]
             master = pd.concat([master, bench_player], ignore_index=True)
             # ---------------------------------------------------------------
@@ -250,6 +251,7 @@ class AssemblyLines:
             slave = slave.rename(columns={cls.tmj_atom['doc_ref']['key_pos'][0]: slave_key}, inplace=False)
             master = pd.merge(
                 master, slave, how='left', left_on=master_key, right_on=slave_key, validate='many_to_one')
+            master.loc[:, cls.tmj_atom['doc_ref']['key_pos'][0]:].fillna(value='*', inplace=True)
             i = cls.tmj_atom['doc_ref']['val_pos'][-1]
             j = cls.tmj_combination['doc_ref']['val_pos'][3]
             master[i] = master[i] * master[j]
@@ -271,7 +273,7 @@ class AssemblyLines:
                     master = pd.merge(
                         master, slave, how='left', left_on=master_key, right_on=slave_key, validate='many_to_one')
                     master.iloc[:, -1].fillna(value=0, inplace=True)
-                    master.iloc[:, -1] = (master.iloc[:, -1]/master[j]).astype(np.int)
+                    master.iloc[:, -1] = (master.iloc[:, -1] / master[j]).astype(np.int)
             return master
 
     class VipElementWiseSiteStatus:
@@ -319,7 +321,7 @@ class AssemblyLines:
             slave_key = cls.mc_daily_sales['doc_ref']['key_pos'][0]
             master = pd.merge(master, slave, how='left', left_on=master_key, right_on=slave_key)
             master.iloc[:, -1].fillna(value=0, inplace=True)
-            master.iloc[:, -1] = master.iloc[:, -1]*master['数量']
+            master.iloc[:, -1] = master.iloc[:, -1] * master['数量']
             by_key = cls.tmj_combination['doc_ref']['val_pos'][2]
             master.sort_values(by=[by_key], axis=0, ignore_index=True, inplace=True)
             master.iloc[:, -1] = master.groupby(by=[by_key]).week_sales.transform(np.sum)
@@ -349,10 +351,16 @@ class AssemblyLines:
             # -----------------------------------------------------------------------
             master = pd.merge(stock_inventory, mc_sales, how='left', on=tmj_atom_key, validate='many_to_one')
             master.rename(columns={'week_sales': 'mc_week_sales'}, inplace=True)
+            i = doc_ref['vip_fundamental_collections']['key_pos'][1:].copy()
+            i.extend(doc_ref['vip_fundamental_collections']['val_pos'])
+            j = list(map(lambda xx: xx + '_suffix', i))
+            master.rename(columns=dict(zip(i, j)), inplace=True)
+            master = pd.merge(site_status, master, how='left', on=vip_site_key)
+            master = master[master[doc_ref['vip_fundamental_collections']['val_pos'][3]] != '淘汰']
+            # ---------------------------------------------------------
+            group = master.groupby(by=[vip_stock_key, 'bp_criteria'])
             master['platform'] = master['mc_week_sales']
             master['platform'] = np.where(master['platform'].isna(), 0, 1)
-            i = doc_ref['vip_fundamental_collections']['val_pos'][3]
-            group = master.groupby(by=[vip_stock_key, i])
             master['platform'] = group.platform.transform(np.sum)
             master['platform'] = np.where(master['platform'] == 0, '唯品', '共用')
             master['mc_week_sales'].fillna(value=0, inplace=True)
@@ -364,14 +372,54 @@ class AssemblyLines:
             master[i] = group[i].transform(np.sum)
             i = doc_ref['tmj_atom']['val_pos'][4]
             master[i] = group[i].transform(np.sum)
+
             # -----------------------------------------------------------------------
-            bp_group = master.groupby(by=[vip_stock_key, 'bp_mapping'])
-            stock_list = []
+            stock_priorities = []
             for xx in st.doc_stock_real_and_virtual:
                 if xx['identity'] in master.columns.to_list():
-                    xxx = xx['identity'] + '_notes'
-                    master[xxx] = np.nan
-                    stock_list.append(xxx)
+                    i = xx['identity']
+                    j = i + '_notes'
+                    master[j] = master[i]
+                    master[i] = group[i].transform(np.min)
+                    k = st.FEATURE_PRIORITY[i][0]
+                    stock_priorities.append((i, j, k))
+            stock_priorities.sort(key=lambda xx: xx[2])
+            # 把adjustment值加到优先级最高的实体仓库存里
+            i = stock_priorities[1][0]
+            j = stock_priorities[0][0]
+            master[i] += master[j]
+            master[doc_ref['tmj_atom']['val_pos'][2]].fillna(value='*', inplace=True)
+            master.fillna(value=0, inplace=True)
+            master['dsi'] = np.where(
+                master['week_sales'] == 0, np.floor(-1e-6 * master[i]), (master[i] / master['week_sales']) * 7
+            ).astype(np.int)
+            i = stock_priorities[1][1]
+            master.sort_values(by=i, ignore_index=True, inplace=True)
+            old_time = time.time()
+            group = master.groupby(by=[vip_stock_key, 'bp_criteria'])
+            bp_group = master.groupby(by=[vip_stock_key, 'bp_mapping'])
+            ccc = time.time() - old_time
+            print(ccc)
+            i = stock_priorities[1][0]
+            j = stock_priorities[1][1]
+            # Days sales of inventory
+            dsi = np.where(
+                master['week_sales'] == 0, np.ceil(1e-6 * master[i]) * 100, (master[i] / master['week_sales']) * 7
+            ).astype(np.int)
+            # 触发备注提示的阈值, 低于此值会备注提示
+            note_criteria = (dsi <= st.DSI_THRESHOLD) | (master[i] <= st.INVENTORY_THRESHOLD)
+            bp_criteria = bp_group.bp_criteria.transform(np.any)
+            criteria = note_criteria & ~bp_criteria
+            notes_view = master.loc[criteria, :]
+            nv_group = notes_view.groupby(by=vip_stock_key)
+            for k in range(1, len(stock_priorities)):
+                m = stock_priorities[1][0]
+                n = stock_priorities[1][1]
+                i = doc_ref['tmj_atom']['val_pos'][0]
+                j = doc_ref['tmj_atom']['val_pos'][2]
+                notes_view[n] = notes_view[[i, j]].apply(' '.join, axis=1)
+
+                pass
 
             pass
 
