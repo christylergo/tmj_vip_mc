@@ -156,7 +156,7 @@ COLUMN_PROPERTY.extend(warehouses_stock_virtual)
 COLUMN_PROPERTY.extend(vip_daily_sales_columns)
 
 doc_stock = [{
-    'identity': warehouses[i].lower() + '_stock', 'name': '',
+    'identity': warehouses[i].lower() + '_stock', 'name': warehouses_key_name[i] + '仓',
     'key_words': '^[^虚拟].*' + warehouses_key_name[i] + '[^虚拟].*$', 'key_pos': ['商家编码', ],
     'val_pos': ['残次品', '可发库存', '可用库存'],
     'val_type': ['TEXT', 'INT', 'INT'],
@@ -165,7 +165,7 @@ doc_stock = [{
 ]
 
 doc_stock_virtual = [{
-    'identity': warehouses[i].lower() + '_stock_virtual', 'name': '',
+    'identity': warehouses[i].lower() + '_stock_virtual', 'name': warehouses_key_name[i] + '虚拟仓',
     'key_words': warehouses_key_name[i] + '.*虚拟|虚拟.*' + warehouses_key_name[i],
     'key_pos': ['商家编码', ], 'val_pos': ['残次品', '可发库存', '可用库存'],
     'val_type': ['TEXT', 'INT', 'INT'],

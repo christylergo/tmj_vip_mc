@@ -17,6 +17,7 @@ if __name__ == '__main__':
     # ---------------------------------------------------------
     data_dict = {x['identity']: x for x in processed_data}
     assembled_data = {}
+    noted_data = {}
     for _, inner_class in assembly_lines.items():
         for identity in data_dict:
             if identity in inner_class.__dict__:
@@ -26,7 +27,8 @@ if __name__ == '__main__':
     vip_notes = assembly_lines['VipNotes']
     # vip_notes.subassembly = assembled_data  # 这个方式的赋值操作会无效, 暂不能理解, 所以使用setattr方法
     setattr(vip_notes, 'subassembly', assembled_data)
-    noted_data = vip_notes.assemble()
+    noted_data['vip_notes'] = vip_notes.assemble()
+    noted_data['master'] = data_dict['vip_fundamental_collections']['data_frame']
     final_assembly = assembly_lines['FinalAssembly']
     setattr(final_assembly, 'subassembly', noted_data)
     final_assembled_data = final_assembly.assemble()
