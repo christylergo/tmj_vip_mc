@@ -15,6 +15,8 @@ MC_SALES_INTERVAL = 20
 DSI_THRESHOLD = 3
 # 触发备注提示的主仓库存阈值, 低于此值会备注提示
 INVENTORY_THRESHOLD = 20
+# 设置是否只显示主仓备注, 设置为False则显示全部仓备注
+MAIN_NOTES_ONLY = True
 # 占位符,用于列簇层级结构
 placeholder = None
 # ---------------------文件夹路径(填写在引号内)-------------------------
@@ -30,14 +32,14 @@ warehouses_key_name = ['汉川', '城东', '岭顶', '越中', '琳达', '批发
 
 # 各仓显示优先级,数字越小显示越靠前, True表示显示此列，False表示不显示
 WAREHOUSE_PRIORITY = {
-    'HanChuan': [1, True],  # 汉川仓
-    'ChengDong': [2, True],  # 城东仓
-    'LingDing': [3, True],  # 岭顶仓
-    'YueZhong': [4, True],  # 越中小件仓
-    'LinDa': [5, True],  # 琳达仓
+    'ChengDong': [1, True],  # 城东仓
+    'LingDing': [2, True],  # 岭顶仓
+    'YueZhong': [3, True],  # 越中小件仓
+    'HanChuan': [4, True],  # 汉川仓
+    'KunShan': [5, True],  # 昆山仓
     'PiFa': [6, True],  # 五夫批发仓
-    'KunShan': [7, True],  # 昆山仓
-    'adjustment': [0, True],  # 库存修正，不需要显示，但是数据优先级最高
+    'LinDa': [7, True],  # 琳达仓
+    'adjustment': [0, False],  # 库存修正，不需要显示，但是数据优先级最高
 }
 
 # 各属性显示优先级,数字越小显示越靠前, True表示显示此列，False表示不显示
@@ -49,17 +51,17 @@ FEATURE_PRIORITY = {
     'vip_barcode': [4, True],  # 唯品条码
     'vip_commodity': [5, False],  # 唯品货号
     'vip_item_name': [6, True],  # 商品名称
-    'tmj_barcode': [7, True],  # 货品条码明细
-    'vip_category': [8, True],  # 唯品分类
-    'month_sales': [9, True],  # 月销量
-    'stock_DSI': [10, True],  # 可用库存周转
+    'tmj_barcode': [7, True],  # 旺店通货品条码明细
+    'vip_category': [8, False],  # 唯品分类
+    'month_sales': [9, False],  # 月销量
+    'DSI': [10, True],  # 可用库存周转
     'site_DSI': [11, True],  # 页面库存周转
     'site_inventory': [12, True],  # 页面库存
     'disassemble': [13, True],  # 组合分解为单品,在此列填写数量重新运行后会生成分解后的单品数量。
     'WAREHOUSE_PRIORITY': [14, True],  # 仓组库存作为一个集合的优先级，一个或多个仓
-    'cost': [15, True],  # 成本
-    'weight': [16, True],  # 重量
-    'annotation': [17, True],  # 备注，包括缺货的货品信息，缺货情况下如果有可以替换的货品也会写在备注里
+    'annotation': [15, True],  # 备注，包括缺货的货品信息，缺货情况下如果有可以替换的货品也会写在备注里
+    'cost': [16, True],  # 成本
+    'weight': [17, True],  # 重量
     'site_link': [18, True],  # 网页链接
     # 按天显示最近一周的销量,注意此处是字典生成式(iterable)
     'DAILY_SALES_WEEK': [19, True],
@@ -95,59 +97,65 @@ WAREHOUSE_PRIORITY_REAL_VIRTUAL = ({
 
 for i in range(0, len(warehouses)):
     FEATURE_PRIORITY.update(next(WAREHOUSE_PRIORITY_REAL_VIRTUAL))
+# 把备注列移到紧靠主仓列之后
+FEATURE_PRIORITY['annotation'][0] = FEATURE_PRIORITY.get('WAREHOUSE_PRIORITY')[0] + 19
 
 # 定义全部可能会用到的列,用生成式来定义特性一致的列，如库存列以及日销列
 COLUMN_PROPERTY = [
     {'identity': 'row_nu', 'name': '序号',
-     'refer_doc': 'self', 'floating_title': placeholder},
+     'refer_doc': 'self', 'floating_title': 'index', 'data_type': None},
     {'identity': 'platform', 'name': '在售平台', 'refer_doc': 'arrAtom',
-     'floating_title': 'platform'},  # 1唯品，2猫超，3共用
+     'floating_title': 'platform', 'data_type': None},  # 1唯品，2猫超，3共用
     {'identity': 'status', 'name': '在架状态',
-     'refer_doc': 'vip_routine_operation', 'floating_title': '尺码状态'},
+     'refer_doc': 'vip_routine_operation', 'floating_title': '尺码状态', 'data_type': None},
     {'identity': 'vip_barcode', 'name': '唯品条码',
-     'refer_doc': 'vip_fundamental_collections', 'floating_title': '唯品后台条码'},
+     'refer_doc': 'vip_fundamental_collections', 'floating_title': '唯品后台条码', 'data_type': None},
     {'identity': 'vip_commodity', 'name': '唯品货号', 'refer_doc': 'vip_fundamental_collections',
-     'floating_title': '唯品会货号'},
+     'floating_title': '唯品会货号', 'data_type': None},
     {'identity': 'vip_item_name', 'name': '商品名称',
-     'refer_doc': 'vip_fundamental_collections', 'floating_title': '商品名称'},
+     'refer_doc': 'vip_fundamental_collections', 'floating_title': '商品名称', 'data_type': None},
     {'identity': 'tmj_barcode', 'name': '旺店通编码明细',
-     'refer_doc': 'arrAtom', 'floating_title': 'tmj_barcode'},
+     'refer_doc': 'arrAtom', 'floating_title': 'tmj_barcode', 'data_type': None},
     {'identity': 'vip_category', 'name': '类别',
-     'refer_doc': 'vip_fundamental_collections', 'floating_title': '类别'},
+     'refer_doc': 'vip_fundamental_collections', 'floating_title': '类别', 'data_type': None},
     {'identity': 'month_sales', 'name': '月销量',
-     'refer_doc': 'vip_daily_sales', 'floating_title': 'month_sales'},
+     'refer_doc': 'vip_daily_sales', 'floating_title': 'month_sales', 'data_type': 'int'},
     {'identity': 'mc_week_sales', 'name': '猫超周销量',
-     'refer_doc': 'mc_daily_sales', 'floating_title': 'mc_week_sales'},
-    {'identity': 'site_DSI', 'name': '',
-     'refer_doc': 'self', 'floating_title': placeholder},
+     'refer_doc': 'mc_daily_sales', 'floating_title': 'mc_week_sales', 'data_type': 'int'},
+    {'identity': 'site_DSI', 'name': '页面库存周转',
+     'refer_doc': 'self', 'floating_title': 'dss', 'data_type': 'int'},
+    {'identity': 'DSI', 'name': '可用库存周转',
+     'refer_doc': 'self', 'floating_title': 'dsi', 'data_type': 'int'},
     {'identity': 'site_inventory', 'name': '页面库存余量',
-     'refer_doc': 'vip_routine_site_stock', 'floating_title': '可扣库存'},
+     'refer_doc': 'vip_routine_site_stock', 'floating_title': '可扣库存', 'data_type': 'int'},
     {'identity': 'disassemble', 'name': '组合分解',
-     'refer_doc': 'self', 'floating_title': placeholder},
+     'refer_doc': 'self', 'floating_title': 'disassemble', 'data_type': None},
     {'identity': 'cost', 'name': '成本',
-     'refer_doc': 'tmj_atom', 'floating_title': '会员价'},
+     'refer_doc': 'tmj_atom', 'floating_title': '会员价', 'data_type': None},
     {'identity': 'weight', 'name': '重量',
-     'refer_doc': 'tmj_atom', 'floating_title': '重量'},
+     'refer_doc': 'tmj_atom', 'floating_title': '重量', 'data_type': None},
     {'identity': 'annotation', 'name': '备注',
-     'refer_doc': 'arrAtom', 'floating_title': 'annotation'},
+     'refer_doc': 'arrAtom', 'floating_title': 'notes', 'data_type': None},
     {'identity': 'site_link', 'name': '商品链接',
-     'refer_doc': 'vip_daily_sales', 'floating_title': '商品链接'},
+     'refer_doc': 'vip_daily_sales', 'floating_title': '商品链接', 'data_type': None},
 ]
 
 vip_daily_sales_columns = [{
     'identity': daily_sales_week_title[i], 'name': daily_sales_week_title[i],
-    'refer_doc': 'vip_daily_sales', 'floating_title': daily_sales_week_title[i]
+    'refer_doc': 'vip_daily_sales', 'floating_title': daily_sales_week_title[i], 'data_type': 'int'
 } for i in range(0, VIP_SALES_INTERVAL)]
 
 warehouses_stock = [{
     'identity': warehouses[i].lower() + '_stock', 'name': warehouses_key_name[i] + '仓库存',
-    'refer_doc': warehouses[i].lower() + '_stock', 'floating_title': [warehouses[i].lower() + '_stock']
+    'refer_doc': warehouses[i].lower() + '_stock', 'floating_title': warehouses[i].lower() + '_stock',
+    'data_type': 'int'
 } for i in range(0, len(warehouses))
 ]
 
 warehouses_stock_virtual = [{
     'identity': warehouses[i].lower() + '_stock_virtual', 'name': warehouses_key_name[i] + '虚拟仓库存',
-    'refer_doc': warehouses[i].lower() + '_stock_virtual', 'floating_title': [warehouses[i].lower() + '_stock_virtual']
+    'refer_doc': warehouses[i].lower() + '_stock_virtual', 'floating_title': warehouses[i].lower() + '_stock_virtual',
+    'data_type': 'int'
 } for i in range(0, len(warehouses))
 ]
 

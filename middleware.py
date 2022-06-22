@@ -251,7 +251,6 @@ class AssemblyLines:
             master_key = cls.tmj_combination['doc_ref']['val_pos'][2]
             slave = cls.tmj_atom['data_frame']
             slave_key = str.join('_', [cls.tmj_atom['doc_ref']['key_pos'][0], cls.tmj_atom['identity']])
-            # inplace=True会直接在原dataframe上面修改, False在副本上修改并返回副本
             slave = slave.rename(columns={cls.tmj_atom['doc_ref']['key_pos'][0]: slave_key}, inplace=False)
             master = pd.merge(
                 master, slave, how='left', left_on=master_key, right_on=slave_key, validate='many_to_one')
@@ -418,6 +417,15 @@ class AssemblyLines:
             master.sort_values(by='bp_criteria', kind='mergesort', ignore_index=True, inplace=True)
             group = master.groupby(by=[vip_stock_key, 'bp_criteria'])
             bp_group = master.groupby(by=[vip_stock_key, 'bp_mapping'])
+            i = doc_ref['tmj_combination']['val_pos'][2]
+            j = doc_ref['tmj_combination']['val_pos'][3]
+            master['tmj_barcode'] = ''
+            shadow = master.loc[:, j]
+            master.loc[:, j] = master.loc[:, j].astype(np.int).astype(str)
+            master.loc[:, 'tmj_barcode'] = np.where(
+                shadow > 1, master.loc[:, (i, j)].apply('*'.join, axis=1), master.loc[:, i])
+            master.loc[:, j] = master.loc[:, j].astype(np.int)
+            master.loc[:, 'tmj_barcode'] = group.tmj_barcode.transform('# '.join)
             i = stock_priorities[1][0]
             # j = stock_priorities[1][1]
             # Days sales of inventory
@@ -426,11 +434,15 @@ class AssemblyLines:
             ).astype(np.int)
             # 触发备注提示的阈值, 低于此值会备注提示
             note_criteria = (dsi <= st.DSI_THRESHOLD) | (master[i] <= st.INVENTORY_THRESHOLD)
-            bp_criteria = master.bp_criteria
+            # 必须先设定数据类型为bool, 否则取反不能得到想要的结果
+            bp_criteria = master.bp_criteria.astype(bool)
             criteria = note_criteria & ~bp_criteria
+            note_criteria = group.bp_criteria.transform(len) > 1
+            criteria = criteria & note_criteria
             notes_view = master.loc[criteria, :]
             nv_group = notes_view.groupby(by=vip_stock_key)
-            for k in range(1, len(stock_priorities)):
+            limit = 2 if st.MAIN_NOTES_ONLY else len(stock_priorities)
+            for k in range(1, limit):
                 i = doc_ref['tmj_atom']['val_pos'][0]
                 j = doc_ref['tmj_atom']['val_pos'][2]
                 m = stock_priorities[k][2]
@@ -442,9 +454,8 @@ class AssemblyLines:
                     notes_view.loc[:, j] = notes_view.loc[:, j].astype(np.int).astype(str)
                     notes_view.loc[:, m] = notes_view[[m, j]].apply('剩余'.join, axis=1)
                     notes_view.loc[:, m] = nv_group[m].transform(';'.join)
-                    # notes_view.loc[:, j] = doc_ref[i]['name']
-                    # notes_view.loc[:, m] = notes_view[[j, m]].apply(': '.join, axis=1)
-                    notes_view.loc[:, m] = notes_view[m].map(lambda xx: ': '.join([doc_ref[i]['name'], xx]))
+                    if not st.MAIN_NOTES_ONLY:
+                        notes_view.loc[:, m] = notes_view[m].map(lambda xx: ': '.join([doc_ref[i]['name'], xx]))
             master.loc[criteria, 'notes'] = notes_view.loc[:, stock_priorities[1][2]:].apply('; '.join, axis=1)
             # ccc = time.time() - old_time
             # old_time = time.time()
@@ -453,7 +464,8 @@ class AssemblyLines:
                 master['week_sales'] == 0, np.ceil(1e-6 * master[i]) * 100, (master[i] / master['week_sales']) * 7
             ).astype(np.int)
             note_criteria = (dsi <= st.DSI_THRESHOLD) | (master[stock_priorities[1][1]] <= st.INVENTORY_THRESHOLD)
-            note_criteria = note_criteria & ~master.bp_criteria & bp_group.bp_criteria.transform(np.any)
+            bp_criteria = master.bp_criteria.astype(bool)
+            note_criteria = note_criteria & ~bp_criteria & bp_group.bp_criteria.transform(np.any)
             bp_criteria = (dsi > st.DSI_THRESHOLD) | (master[stock_priorities[1][1]] > st.INVENTORY_THRESHOLD)
             bp_criteria = bp_criteria & master.bp_criteria
             criteria = note_criteria | bp_criteria
@@ -478,7 +490,7 @@ class AssemblyLines:
             master.loc[:, 'notes'].fillna(value='', inplace=True)
             master.loc[:, 'notes'] = master.loc[:, ['notes', 'bp_notes']].apply(' '.join, axis=1)
             # bp_criteria列的值本来就是True/False, 但是直接取反的结果会和预期严重不符, 需要先强制标定数据类型
-            i = ~(master['bp_criteria'].astype(bool))
+            i = ~(master.bp_criteria.astype(bool))
             master = master.loc[i, :]
             ccc = time.time() - old_time
             return master
@@ -499,9 +511,35 @@ class AssemblyLines:
             y = doc_ref['vip_fundamental_collections']['val_pos']
             z = list(map(lambda xx: xx + '_slave', y))
             slave.rename(columns=dict(zip(y, z)), inplace=True)
-            master = pd.merge(master, slave, how='left', on=[i, j], validate='many_to_one')
-            # master.to_excel("path_to_file.xlsx", sheet_name="Sheet1")
-            pass
+            master = pd.merge(master, slave, how='inner', on=[i, j], validate='many_to_one')
+            i = doc_ref['vip_fundamental_collections']['val_pos'][3]
+            master = master.loc[master[i] != '淘汰', :]
+            # -----------------------------------------------------------------------
+            old_time = time.time()
+            master_columns = master.columns.to_list()
+            multi_index = []
+            master_title = []
+            for i in st.COLUMN_PROPERTY:
+                if i['floating_title'] in master_columns:
+                    j = st.FEATURE_PRIORITY[i['identity']][0]
+                    visible = st.FEATURE_PRIORITY[i['identity']][1]
+                    master_title.append(i['floating_title'])
+                    multi_index.append((i['name'], i['floating_title'], j, i['data_type'], visible))
+            multi_index = pd.MultiIndex.from_tuples(
+                multi_index, names=['name', 'master_title', 'priority', 'data_type', 'visible'])
+            master = master.reindex(columns=master_title)
+            master.columns = multi_index
+            ccc = time.time() - old_time
+            master.sort_index(axis=1, level='priority', inplace=True)
+            master = master.xs(True, level='visible', axis=1)
+            master.loc(axis=1)[:, :, :, 'int'] = master.loc(axis=1)[:, :, :, 'int'].astype(np.int)
+            # 筛选后multi index只剩下3层. 所以只需要drop 2层即可
+            master = master.droplevel(level=[1, 2, 3], axis=1)
+            master.index = range(1, master.index.size + 1)
+            master.index.name = '序号'
+            # 接下来添加styles
+            # master.to_excel('path_to_pandas.xlsx', sheet_name='pandas')
+            return master
 
 
 for x in st.doc_stock_real_and_virtual:
