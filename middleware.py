@@ -57,8 +57,8 @@ class MiddlewareArsenal:
         if doc_df is not None:
             # 不需要reset index, 这个操作很耗时
             # to_sql_df = doc_df.reset_index(drop=True)
-            to_sql_df = doc_df
-        data_frame = data_frame
+            to_sql_df = doc_df.copy()
+        data_frame = data_frame.copy()
         return data_frame, to_sql_df
 
     # --------------------------------------------------
@@ -67,7 +67,7 @@ class MiddlewareArsenal:
         key_col = data_ins['doc_ref']['key_pos'][0]
         date_col = data_ins['doc_ref']['key_pos'][1]
         sales_col = data_ins['doc_ref']['val_pos'][0]
-        data_frame = data_ins['data_frame']
+        data_frame = data_ins['data_frame'].copy()
         sales_date_head = datetime.datetime.today() - datetime.timedelta(days=st.VIP_SALES_INTERVAL)
         data_frame = data_frame.loc[lambda df: pd.to_datetime(df[date_col]) >= sales_date_head, :]
         if data_frame.empty:
@@ -120,7 +120,7 @@ class MiddlewareArsenal:
         """
         while self is not None:
             print('eliminate the weak warnings')
-        df = data_ins['data_frame']
+        df = data_ins['data_frame'].copy()
         df['bp_mapping'] = df[data_ins['doc_ref']['val_pos'][2]]
         data_ins['data_frame'] = df
 
@@ -133,10 +133,14 @@ class MiddlewareArsenal:
             print('eliminate the weak warnings')
         key_col = data_ins['doc_ref']['key_pos'][0]
         val_col = data_ins['doc_ref']['val_pos'][0]
-        data_frame = data_ins['data_frame']
-        criterion = data_frame[val_col].map(lambda xx: str(xx).find('-') == -1)
+        df = data_ins['data_frame']
+        criterion = df[val_col] != '-'
         # 注意不要在切片或者视图上执行drop等操作
-        df = data_frame[criterion].copy()
+        df = df[criterion].copy()
+        group = df.groupby(key_col)
+        # data frame astype加了参数copy=False也不能有效地实现自身数据转换
+        df.loc[:, val_col] = df.loc[:, val_col].astype(dtype=np.int)
+        df.loc[:, val_col] = group[val_col].transform(np.max)
         df.drop_duplicates(subset=key_col, keep='first', inplace=True, ignore_index=True)
         data_ins['data_frame'] = df
 
@@ -147,7 +151,7 @@ class MiddlewareArsenal:
         criteria_col = data_ins['doc_ref']['val_pos'][0]
         available = data_ins['doc_ref']['val_pos'][1]
         inventory = data_ins['doc_ref']['val_pos'][2]
-        data_frame = data_ins['data_frame']
+        data_frame = data_ins['data_frame'].copy()
         ref_cols = data_ins['doc_ref']['key_pos'].copy()
         ref_cols.extend(data_ins['doc_ref']['val_pos'])
         columns = data_frame.columns.to_list()
@@ -276,7 +280,7 @@ class AssemblyLines:
                     slave.columns = pd.Index(new_column_names)
                     master = pd.merge(
                         master, slave, how='left', left_on=master_key, right_on=slave_key, validate='many_to_one')
-                    master.iloc[:, -1].fillna(value=0, inplace=True)
+                    master.iloc[:, -1] = master.iloc[:, -1].fillna(value=0)
                     master.iloc[:, -1] = (master.iloc[:, -1] / master[j]).astype(np.int)
             return master
 
@@ -330,7 +334,7 @@ class AssemblyLines:
             slave = cls.mc_daily_sales['data_frame']
             slave_key = cls.mc_daily_sales['doc_ref']['key_pos'][0]
             master = pd.merge(master, slave, how='left', left_on=master_key, right_on=slave_key)
-            master.iloc[:, -1].fillna(value=0, inplace=True)
+            master.iloc[:, -1] = master.iloc[:, -1].fillna(value=0)
             master.iloc[:, -1] = master.iloc[:, -1] * master['数量']
             by_key = cls.tmj_combination['doc_ref']['val_pos'][2]
             master.sort_values(by=[by_key], axis=0, ignore_index=True, inplace=True)
@@ -374,8 +378,8 @@ class AssemblyLines:
             master['platform'] = np.where(master['platform'].isna(), 0, 1)
             master['platform'] = group.platform.transform(np.sum)
             master['platform'] = np.where(master['platform'] == 0, '唯品', '共用')
-            master['week_sales'].fillna(value=0, inplace=True)
-            master['mc_week_sales'].fillna(value=0, inplace=True)
+            master['week_sales'] = master['week_sales'].fillna(value=0)
+            master['mc_week_sales'] = master['mc_week_sales'].fillna(value=0)
             i = doc_ref['tmj_combination']['val_pos'][3]
             master['mc_week_sales'] = master['mc_week_sales'] / master[i]
             master['mc_week_sales'] = group.mc_week_sales.transform(np.max)
@@ -392,8 +396,6 @@ class AssemblyLines:
                     i = xx['identity']
                     j = i + '_detail'
                     m = i + '_notes'
-                    master[j] = master[i]
-                    master[i] = group[i].transform(np.min)
                     k = st.FEATURE_PRIORITY[i][0]
                     stock_priorities.append((i, j, m, k))
             stock_priorities.sort(key=lambda xx: xx[3])
@@ -401,9 +403,15 @@ class AssemblyLines:
             i = stock_priorities[1][0]
             j = stock_priorities[0][0]
             master[i] += master[j]
+            # 把备注列移到紧靠主仓列之后
+            st.FEATURE_PRIORITY['annotation'][0] = stock_priorities[1][3] + 1
+            for k in stock_priorities:
+                master[k[1]] = master[k[0]]
+                master[k[0]] = group[k[0]].transform(np.min)
             # drop nan 能比较好地解决后续操作中遇到的无效值问题.
             master[doc_ref['tmj_atom']['val_pos'][2]].fillna(value='*', inplace=True)
             master.dropna(subset=[doc_ref['tmj_atom']['val_pos'][0], ], inplace=True, axis=0)
+            # i = stock_priorities[1][0]
             master['dsi'] = np.where(
                 master['week_sales'] == 0, np.floor(-1e-6 * master[i]), (master[i] / master['week_sales']) * 7
             ).astype(np.int)
@@ -511,6 +519,7 @@ class AssemblyLines:
             y = doc_ref['vip_fundamental_collections']['val_pos']
             z = list(map(lambda xx: xx + '_slave', y))
             slave.rename(columns=dict(zip(y, z)), inplace=True)
+            # raw_data = pd.merge(master, slave, how='left', on=[i, j], validate='many_to_one')
             master = pd.merge(master, slave, how='inner', on=[i, j], validate='many_to_one')
             i = doc_ref['vip_fundamental_collections']['val_pos'][3]
             master = master.loc[master[i] != '淘汰', :]
@@ -524,21 +533,27 @@ class AssemblyLines:
                     j = st.FEATURE_PRIORITY[i['identity']][0]
                     visible = st.FEATURE_PRIORITY[i['identity']][1]
                     master_title.append(i['floating_title'])
-                    multi_index.append((i['name'], i['floating_title'], j, i['data_type'], visible))
+                    multi_index.append((i['name'], i['floating_title'], j, i.get('data_type', 'str'), visible))
             multi_index = pd.MultiIndex.from_tuples(
                 multi_index, names=['name', 'master_title', 'priority', 'data_type', 'visible'])
+            # raw_data = raw_data.reindex(columns=master_title)
             master = master.reindex(columns=master_title)
+            # raw_data.columns = multi_index
             master.columns = multi_index
             ccc = time.time() - old_time
+            # raw_data.sort_index(axis=1, level='priority', inplace=True)
             master.sort_index(axis=1, level='priority', inplace=True)
             master = master.xs(True, level='visible', axis=1)
+            # raw_data.loc(axis=1)[:, :, :, 'int'] = raw_data.loc(axis=1)[:, :, :, 'int'].fillna(value=0)
+            # data frame astype加了参数copy=False也不能有效地实现自身数据转换, fillna也有同样的问题
+            # raw_data.loc(axis=1)[:, :, :, 'int'] = raw_data.loc(axis=1)[:, :, :, 'int'].astype(np.int)
+            master.loc(axis=1)[:, :, :, 'str'] = master.loc(axis=1)[:, :, :, 'str'].astype(str)
             master.loc(axis=1)[:, :, :, 'int'] = master.loc(axis=1)[:, :, :, 'int'].astype(np.int)
             # 筛选后multi index只剩下3层. 所以只需要drop 2层即可
-            master = master.droplevel(level=[1, 2, 3], axis=1)
+            # master = master.droplevel(level=[1, 2, 3], axis=1)
             master.index = range(1, master.index.size + 1)
+            # raw_data.index.name = '序号'
             master.index.name = '序号'
-            # 接下来添加styles
-            # master.to_excel('path_to_pandas.xlsx', sheet_name='pandas')
             return master
 
 

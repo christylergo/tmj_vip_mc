@@ -43,13 +43,21 @@ class DocumentIO(threading.Thread):
     @classmethod
     def get_files_list(cls) -> None:
         files = Path(st.DOCS_PATH)
-        files_list = [{
-            'identity': None,
-            'file_name': str(file),
-            'file_mtime': file.stat().st_mtime,
-            'file_mtime_in_sqlite': None,
-            'read_doc': True,
-        } for file in files.glob('*')]
+        files_list = []
+        for file_dir in files.glob('*'):
+            if os.path.isdir(file_dir):
+                file_dir = Path(file_dir).glob('*')
+            else:
+                file_dir = [file_dir]
+            for file in file_dir:
+                i = {
+                    'identity': None,
+                    'file_name': str(file),
+                    'file_mtime': file.stat().st_mtime,
+                    'file_mtime_in_sqlite': None,
+                    'read_doc': True,
+                }
+                files_list.append(i)
         cls.files = files_list
 
     @classmethod

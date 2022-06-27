@@ -17,22 +17,20 @@ DSI_THRESHOLD = 3
 INVENTORY_THRESHOLD = 20
 # 设置是否只显示主仓备注, 设置为False则显示全部仓备注
 MAIN_NOTES_ONLY = True
-# 占位符,用于列簇层级结构
-placeholder = None
 # ---------------------文件夹路径(填写在引号内)-------------------------
 # 网上导出数据文件夹路径
 DOCS_PATH = 'vip_docs'
 
 # 库存显示方面的设置
 warehouses = [
-    'HanChuan', 'ChengDong', 'LingDing', 'YueZhong', 'LinDa', 'PiFa', 'KunShan', 'adjustment'
+    'HanChuan', 'Vip', 'LingDing', 'YueZhong', 'LinDa', 'PiFa', 'KunShan', 'adjustment'
 ]
 # 下面这行列出来的是各个库存文件名称的关键字,用于识别是哪个仓的库存
-warehouses_key_name = ['汉川', '城东', '岭顶', '越中', '琳达', '批发', '昆山', '修正']
+warehouses_key_name = ['汉川', '唯品', '岭顶|领顶', '越中', '琳达', '批发', '昆山', '修正']
 
 # 各仓显示优先级,数字越小显示越靠前, True表示显示此列，False表示不显示
 WAREHOUSE_PRIORITY = {
-    'ChengDong': [1, True],  # 城东仓
+    'Vip': [1, True],  # 上虞唯品仓
     'LingDing': [2, True],  # 岭顶仓
     'YueZhong': [3, True],  # 越中小件仓
     'HanChuan': [4, True],  # 汉川仓
@@ -91,33 +89,32 @@ WAREHOUSE_PRIORITY_REAL_VIRTUAL = ({
     warehouses[i].lower() + '_stock_virtual': [
         WAREHOUSE_PRIORITY[warehouses[i]][0] + 1, WAREHOUSE_PRIORITY[warehouses[i]][1]],
     warehouses[i].lower() + '_stock': [
-        WAREHOUSE_PRIORITY[warehouses[i]][0] + 2, WAREHOUSE_PRIORITY[warehouses[i]][1]],
+        WAREHOUSE_PRIORITY[warehouses[i]][0] + 5, WAREHOUSE_PRIORITY[warehouses[i]][1]],
 } for i in range(0, len(warehouses))
 )
 
 for i in range(0, len(warehouses)):
     FEATURE_PRIORITY.update(next(WAREHOUSE_PRIORITY_REAL_VIRTUAL))
-# 把备注列移到紧靠主仓列之后
-FEATURE_PRIORITY['annotation'][0] = FEATURE_PRIORITY.get('WAREHOUSE_PRIORITY')[0] + 19
 
 # 定义全部可能会用到的列,用生成式来定义特性一致的列，如库存列以及日销列
+# 默认列宽6, 默认居中， 默认data_type string
 COLUMN_PROPERTY = [
     {'identity': 'row_nu', 'name': '序号',
-     'refer_doc': 'self', 'floating_title': 'index', 'data_type': None},
+     'refer_doc': 'self', 'floating_title': 'index'},
     {'identity': 'platform', 'name': '在售平台', 'refer_doc': 'arrAtom',
-     'floating_title': 'platform', 'data_type': None},  # 1唯品，2猫超，3共用
+     'floating_title': 'platform'},  # 1唯品，2猫超，3共用
     {'identity': 'status', 'name': '在架状态',
-     'refer_doc': 'vip_routine_operation', 'floating_title': '尺码状态', 'data_type': None},
-    {'identity': 'vip_barcode', 'name': '唯品条码',
-     'refer_doc': 'vip_fundamental_collections', 'floating_title': '唯品后台条码', 'data_type': None},
+     'refer_doc': 'vip_routine_operation', 'floating_title': '尺码状态', 'width': 7},
+    {'identity': 'vip_barcode', 'name': '唯品条码', 'refer_doc': 'vip_fundamental_collections',
+     'floating_title': '唯品后台条码', 'width': 15},
     {'identity': 'vip_commodity', 'name': '唯品货号', 'refer_doc': 'vip_fundamental_collections',
-     'floating_title': '唯品会货号', 'data_type': None},
-    {'identity': 'vip_item_name', 'name': '商品名称',
-     'refer_doc': 'vip_fundamental_collections', 'floating_title': '商品名称', 'data_type': None},
-    {'identity': 'tmj_barcode', 'name': '旺店通编码明细',
-     'refer_doc': 'arrAtom', 'floating_title': 'tmj_barcode', 'data_type': None},
+     'floating_title': '唯品会货号', 'width': 15},
+    {'identity': 'vip_item_name', 'name': '商品名称', 'refer_doc': 'vip_fundamental_collections',
+     'floating_title': '商品名称', 'width': 40, 'alignment': 'Left', 'text_wrap': True},
+    {'identity': 'tmj_barcode', 'name': '旺店通编码明细', 'refer_doc': 'arrAtom',
+     'floating_title': 'tmj_barcode', 'width': 20, 'alignment': 'Left', 'text_wrap': True},
     {'identity': 'vip_category', 'name': '类别',
-     'refer_doc': 'vip_fundamental_collections', 'floating_title': '类别', 'data_type': None},
+     'refer_doc': 'vip_fundamental_collections', 'floating_title': '类别'},
     {'identity': 'month_sales', 'name': '月销量',
      'refer_doc': 'vip_daily_sales', 'floating_title': 'month_sales', 'data_type': 'int'},
     {'identity': 'mc_week_sales', 'name': '猫超周销量',
@@ -129,15 +126,15 @@ COLUMN_PROPERTY = [
     {'identity': 'site_inventory', 'name': '页面库存余量',
      'refer_doc': 'vip_routine_site_stock', 'floating_title': '可扣库存', 'data_type': 'int'},
     {'identity': 'disassemble', 'name': '组合分解',
-     'refer_doc': 'self', 'floating_title': 'disassemble', 'data_type': None},
+     'refer_doc': 'self', 'floating_title': 'disassemble'},
     {'identity': 'cost', 'name': '成本',
-     'refer_doc': 'tmj_atom', 'floating_title': '会员价', 'data_type': None},
+     'refer_doc': 'tmj_atom', 'floating_title': '会员价', 'data_type': 'float'},
     {'identity': 'weight', 'name': '重量',
-     'refer_doc': 'tmj_atom', 'floating_title': '重量', 'data_type': None},
+     'refer_doc': 'tmj_atom', 'floating_title': '重量', 'data_type': 'float'},
     {'identity': 'annotation', 'name': '备注',
-     'refer_doc': 'arrAtom', 'floating_title': 'notes', 'data_type': None},
+     'refer_doc': 'arrAtom', 'floating_title': 'notes', 'width': 15},
     {'identity': 'site_link', 'name': '商品链接',
-     'refer_doc': 'vip_daily_sales', 'floating_title': '商品链接', 'data_type': None},
+     'refer_doc': 'vip_daily_sales', 'floating_title': '商品链接', 'width': 9, 'alignment': 'Left'},
 ]
 
 vip_daily_sales_columns = [{
@@ -146,14 +143,14 @@ vip_daily_sales_columns = [{
 } for i in range(0, VIP_SALES_INTERVAL)]
 
 warehouses_stock = [{
-    'identity': warehouses[i].lower() + '_stock', 'name': warehouses_key_name[i] + '仓库存',
+    'identity': warehouses[i].lower() + '_stock', 'name': warehouses_key_name[i].split('|')[0] + '仓库存',
     'refer_doc': warehouses[i].lower() + '_stock', 'floating_title': warehouses[i].lower() + '_stock',
     'data_type': 'int'
 } for i in range(0, len(warehouses))
 ]
 
 warehouses_stock_virtual = [{
-    'identity': warehouses[i].lower() + '_stock_virtual', 'name': warehouses_key_name[i] + '虚拟仓库存',
+    'identity': warehouses[i].lower() + '_stock_virtual', 'name': warehouses_key_name[i].split('|')[0] + '虚拟仓库存',
     'refer_doc': warehouses[i].lower() + '_stock_virtual', 'floating_title': warehouses[i].lower() + '_stock_virtual',
     'data_type': 'int'
 } for i in range(0, len(warehouses))
@@ -165,7 +162,8 @@ COLUMN_PROPERTY.extend(vip_daily_sales_columns)
 
 doc_stock = [{
     'identity': warehouses[i].lower() + '_stock', 'name': warehouses_key_name[i] + '仓',
-    'key_words': '^[^虚拟].*' + warehouses_key_name[i] + '[^虚拟].*$', 'key_pos': ['商家编码', ],
+    'key_words': '|'.join([xx .join(['^[^虚拟].*', '[^虚拟]*库存.*$']) for xx in warehouses_key_name[i].split('|')]),
+    'key_pos': ['商家编码', ],
     'val_pos': ['残次品', '可发库存', '可用库存'],
     'val_type': ['TEXT', 'INT', 'INT'],
     'importance': 'optional', 'mode': None,
@@ -174,7 +172,7 @@ doc_stock = [{
 
 doc_stock_virtual = [{
     'identity': warehouses[i].lower() + '_stock_virtual', 'name': warehouses_key_name[i] + '虚拟仓',
-    'key_words': warehouses_key_name[i] + '.*虚拟|虚拟.*' + warehouses_key_name[i],
+    'key_words': '|'.join(['.*虚拟|虚拟.*'.join([xx, xx]) for xx in warehouses_key_name[i].split('|')]),
     'key_pos': ['商家编码', ], 'val_pos': ['残次品', '可发库存', '可用库存'],
     'val_type': ['TEXT', 'INT', 'INT'],
     'importance': 'optional', 'mode': None,

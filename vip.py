@@ -1,11 +1,13 @@
 # -*- coding:utf-8 -*-
 import time
 import reading_docs as rds
+import styles
 from middleware import middleware_arsenal
 from middleware import assembly_lines
 
 if __name__ == '__main__':
     raw_data = rds.multiprocessing_reader()
+    old_time = time.time()
     # 对已读取的dataframe进行预处理
     for data_struct in raw_data:
         identity = data_struct['identity']
@@ -32,3 +34,4 @@ if __name__ == '__main__':
     final_assembly = assembly_lines['FinalAssembly']
     setattr(final_assembly, 'subassembly', noted_data)
     final_assembled_data = final_assembly.assemble()
+    styles.add_styles(final_assembled_data)
