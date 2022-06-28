@@ -1,57 +1,99 @@
 # -*- coding: utf-8 -*-
 import time
+import win32gui
+import win32con
+from openpyxl import Workbook, styles
 import xlwings as xw
 import settings as st
 
 
 def add_styles(dataframe):
-    df = dataframe
-    wb = xw.Book()
-    ws = wb.sheets.active
-    ws.name = 'VipInventory'
-    old_time = time.time()
+    """
+    使用xlwings设置格式, 最多只能循环操作13次, 对于格式样式较多的表格来说很不合适, 这是pywin32接口限制造成的,
+    为避开这些问题, 先使用openpyxl生成带格式空表格, 然后用xlwings打开并填充数据, xlwings的优点是直观高效
+    :param dataframe:
+    :return:
+    """
+    # old_time = time.time()
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'VipInventory'
+    multi_column = dataframe.columns
     # ------------------------------------
-    columns = df.columns.get_level_values(0)
-    data_type = df.columns.get_level_values(3)
-    number_formats = ['0']
-    width = [5]
-    text_wrap = [False]
-    alignment = [-4108]
-    columns_size = df.columns.size
+    columns = ['序号']
+    d_type = ['int']
+    columns.extend(multi_column.get_level_values(0))
+    d_type.extend(multi_column.get_level_values(3))
+    columns_size = multi_column.size + 1
+    type_set = {'int': '0', 'str': '@', 'float': 'General'}
+    a_upper = 65
+    freeze_panes = [None, True]
     for ii in range(columns_size):
+        col = chr(a_upper + ii)
         for jj in st.COLUMN_PROPERTY:
             if jj['name'] == columns[ii]:
-                w = jj.get('width', 6)
-                nf = 'General'
-                wrap = jj.get('text_wrap', False)
-                alm = jj.get('alignment', -4108)
-                if data_type[ii] == 'str':
-                    nf = '@'
-                elif data_type[ii] == 'int':
-                    nf = '0'
-                number_formats.append(nf)
-                width.append(w)
-                text_wrap.append(wrap)
-                alignment.append(alm)
-    a_upper = 65
-    font_size = 11
-    font = '微软雅黑'
-    h_center = -4108
-    h_left = -4131
-    v_center = -4108
-    # 最多循环操作13 次, 尽量避开使用xlwings, openpyxl可以批量设置
-    column = ':'.join([chr(a_upper), chr(a_upper + columns_size+1)])
+                w = jj.get('width', 7)
+                wrap = jj.get('wrap_text', False)
+                alm = jj.get('alignment', 'center')
+                nf = type_set[d_type[ii]]
+                ws.column_dimensions[col].width = w
+                ws.column_dimensions[col].font = styles.Font(
+                    name='微软雅黑',
+                    size=11,
+                    bold=False
+                )
+                ws.column_dimensions[col].alignment = styles.Alignment(
+                    horizontal=alm,
+                    vertical='center',
+                    wrap_text=wrap
+                )
+                ws.column_dimensions[col].number_format = nf
+                # 标记需要冻结的列, 只需标注第一个出现的即可
+                if freeze_panes[1] & jj.get('freeze_panes', False):
+                    freeze_panes[0] = col + str(1)
+                    freeze_panes[1] = False
+
+    title_style = styles.NamedStyle(name='title_style')
+    title_style.font = styles.Font(
+        name='微软雅黑',
+        size=11,
+        bold=True
+    )
+    title_style.alignment = styles.Alignment(
+        horizontal='center',
+        vertical='center',
+        wrap_text=True,
+    )
+    title_style.number_format = '@'
+    wb.add_named_style(title_style)
+    # 不能对row_dimensions设置style
+    for ii in range(columns_size):
+        cell = chr(a_upper + ii) + str(1)
+        ws[cell].style = 'title_style'
+    ws.auto_filter.ref = 'A1:' + chr(a_upper + columns_size - 1) + str(dataframe.index.size+1)
+    ws.freeze_panes = freeze_panes[0]
     # column = 'A:B,E:H'
     # ws.range(column).column_width = width[ii]
-    ws.range(column).number_format = '@'
-    # ws.range(column).wrap_text = text_wrap[ii]
-    ws.range(column).font.size = font_size
-    ws.range(column).font.name = font
-    ws.range(column).api.VerticalAlignment = v_center
-    ws.range(column).api.HorizontalAlignment = h_center
-    # time.sleep(0.2)
     # ------------------------------------
-    ws.range('A1').value = df
-    print(time.time() - old_time)
-    wb.save(r'C:\Users\Administrator\Downloads\path_to_pandas.xlsx')
+    file_path = st.FILE_GENERATED_PATH
+    wb.save(file_path)
+    wb.close()
+    # print(time.time() - old_time)
+    # -----------------------------------
+    add_data(dataframe, file_path)
+    # -----------------------------------
+    # print(time.time() - old_time)
 
+
+def add_data(dataframe, file_path):
+    app = xw.App(visible=True, add_book=False)
+    wb = app.books.open(file_path)
+    ws = wb.sheets[0]
+    df = dataframe.copy()
+    df = df.droplevel(level=[1, 2, 3], axis=1)
+    ws.range('A1').value = df
+    wb.save()
+    # 通过xlwings app获取窗口句柄, 再使用win32接口最大化 最小化是: SW_SHOWMINIMIZED
+    hwnd = app.hwnd
+    win32gui.ShowWindow(hwnd, win32con.SW_SHOWMAXIMIZED)
+    print('fulfill the task!')

@@ -1,7 +1,7 @@
 # -*- coding:utf-8 -*-
 import time
-import reading_docs as rds
 import styles
+import reading_docs as rds
 from middleware import middleware_arsenal
 from middleware import assembly_lines
 
@@ -35,3 +35,4 @@ if __name__ == '__main__':
     setattr(final_assembly, 'subassembly', noted_data)
     final_assembled_data = final_assembly.assemble()
     styles.add_styles(final_assembled_data)
+

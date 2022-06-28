@@ -20,7 +20,8 @@ MAIN_NOTES_ONLY = True
 # ---------------------文件夹路径(填写在引号内)-------------------------
 # 网上导出数据文件夹路径
 DOCS_PATH = 'vip_docs'
-
+# 代码文件夹路径
+CODE_PATH = 'tmj_vip_mc'
 # 库存显示方面的设置
 warehouses = [
     'HanChuan', 'Vip', 'LingDing', 'YueZhong', 'LinDa', 'PiFa', 'KunShan', 'adjustment'
@@ -97,22 +98,22 @@ for i in range(0, len(warehouses)):
     FEATURE_PRIORITY.update(next(WAREHOUSE_PRIORITY_REAL_VIRTUAL))
 
 # 定义全部可能会用到的列,用生成式来定义特性一致的列，如库存列以及日销列
-# 默认列宽6, 默认居中， 默认data_type string
+# 默认列宽7, 默认居中， 默认data_type string
 COLUMN_PROPERTY = [
     {'identity': 'row_nu', 'name': '序号',
-     'refer_doc': 'self', 'floating_title': 'index'},
+     'refer_doc': 'self', 'floating_title': 'index', 'width': 5},
     {'identity': 'platform', 'name': '在售平台', 'refer_doc': 'arrAtom',
-     'floating_title': 'platform'},  # 1唯品，2猫超，3共用
+     'floating_title': 'platform', 'width': 6},  # 1唯品，2猫超，3共用
     {'identity': 'status', 'name': '在架状态',
-     'refer_doc': 'vip_routine_operation', 'floating_title': '尺码状态', 'width': 7},
+     'refer_doc': 'vip_routine_operation', 'floating_title': '尺码状态'},
     {'identity': 'vip_barcode', 'name': '唯品条码', 'refer_doc': 'vip_fundamental_collections',
      'floating_title': '唯品后台条码', 'width': 15},
     {'identity': 'vip_commodity', 'name': '唯品货号', 'refer_doc': 'vip_fundamental_collections',
      'floating_title': '唯品会货号', 'width': 15},
     {'identity': 'vip_item_name', 'name': '商品名称', 'refer_doc': 'vip_fundamental_collections',
-     'floating_title': '商品名称', 'width': 40, 'alignment': 'Left', 'text_wrap': True},
+     'floating_title': '商品名称', 'width': 40, 'alignment': 'left', 'wrap_text': True},
     {'identity': 'tmj_barcode', 'name': '旺店通编码明细', 'refer_doc': 'arrAtom',
-     'floating_title': 'tmj_barcode', 'width': 20, 'alignment': 'Left', 'text_wrap': True},
+     'floating_title': 'tmj_barcode', 'width': 19, 'alignment': 'left', 'wrap_text': True},
     {'identity': 'vip_category', 'name': '类别',
      'refer_doc': 'vip_fundamental_collections', 'floating_title': '类别'},
     {'identity': 'month_sales', 'name': '月销量',
@@ -131,15 +132,16 @@ COLUMN_PROPERTY = [
      'refer_doc': 'tmj_atom', 'floating_title': '会员价', 'data_type': 'float'},
     {'identity': 'weight', 'name': '重量',
      'refer_doc': 'tmj_atom', 'floating_title': '重量', 'data_type': 'float'},
-    {'identity': 'annotation', 'name': '备注',
-     'refer_doc': 'arrAtom', 'floating_title': 'notes', 'width': 15},
+    {'identity': 'annotation', 'name': '备注', 'refer_doc': 'arrAtom',
+     'floating_title': 'notes', 'width': 15, 'alignment': 'left', 'wrap_text': True},
     {'identity': 'site_link', 'name': '商品链接',
-     'refer_doc': 'vip_daily_sales', 'floating_title': '商品链接', 'width': 9, 'alignment': 'Left'},
+     'refer_doc': 'vip_daily_sales', 'floating_title': '商品链接', 'width': 10, 'alignment': 'left'},
 ]
 
 vip_daily_sales_columns = [{
     'identity': daily_sales_week_title[i], 'name': daily_sales_week_title[i],
-    'refer_doc': 'vip_daily_sales', 'floating_title': daily_sales_week_title[i], 'data_type': 'int'
+    'refer_doc': 'vip_daily_sales', 'floating_title': daily_sales_week_title[i], 'data_type': 'int',
+    'freeze_panes': True
 } for i in range(0, VIP_SALES_INTERVAL)]
 
 warehouses_stock = [{
@@ -258,6 +260,8 @@ def get_desktop() -> str:
 desktop = get_desktop()
 DOCS_PATH = os.path.join(desktop, DOCS_PATH)
 # 代码文件夹路径
-CODE_PATH = os.path.join(desktop, 'tmj_vip_mc')
-sys.path.append(CODE_PATH)
+CODE_PATH = os.path.join(desktop, CODE_PATH)
+# 生成表格路径
+FILE_GENERATED_PATH = os.path.join(DOCS_PATH, 'path_via_pandas.xlsx')
+# sys.path.append(CODE_PATH)
 
