@@ -6,7 +6,6 @@ import numpy as np
 import pandas as pd
 import functools
 import datetime
-
 import settings as st
 
 
@@ -22,9 +21,9 @@ class MiddlewareArsenal:
     """
 
     @staticmethod
-    def __rectify_daily_sales(data_ins):
+    def __rectify_daily_sales(data_ins, INTERVAL=30):
         # 这个日期格式的针对性操作应该放进middleware里, 之前放在reading_docs里
-        sales_date_head = datetime.date.today() - datetime.timedelta(days=st.VIP_SALES_INTERVAL)
+        sales_date_head = datetime.date.today() - datetime.timedelta(days=INTERVAL)
         sales_date_tail = datetime.date.today()
         date_col = data_ins['doc_ref']['key_pos'][1]
         data_frame = data_ins['data_frame']
@@ -63,12 +62,14 @@ class MiddlewareArsenal:
 
     # --------------------------------------------------
     @staticmethod
-    def __pivot_daily_sales(data_ins):
+    def __pivot_daily_sales(data_ins, INTERVAL):
         key_col = data_ins['doc_ref']['key_pos'][0]
         date_col = data_ins['doc_ref']['key_pos'][1]
         sales_col = data_ins['doc_ref']['val_pos'][0]
         data_frame = data_ins['data_frame'].copy()
-        sales_date_head = datetime.datetime.today() - datetime.timedelta(days=st.VIP_SALES_INTERVAL)
+        today = time.mktime(datetime.date.today().timetuple())
+        today = datetime.datetime.fromtimestamp(today)
+        sales_date_head = today - datetime.timedelta(days=INTERVAL)
         data_frame = data_frame.loc[lambda df: pd.to_datetime(df[date_col]) >= sales_date_head, :]
         if data_frame.empty:
             return data_frame
@@ -78,7 +79,8 @@ class MiddlewareArsenal:
         data_frame = data_frame.applymap(func=abs)
         data_frame.columns = data_frame.columns.map(lambda xx: f"{pd.to_datetime(xx):%m/%d}")
         # 注意df的切片方式, 两端都是闭区间, python的切片左闭右开
-        data_frame['week_sales'] = data_frame.iloc[:, -1:-7:-1].apply(np.sum, axis=1)
+        slicer = -INTERVAL-1
+        data_frame['agg_sales'] = data_frame.iloc[:, -1:slicer:-1].apply(np.sum, axis=1)
         data_frame.astype(np.int, copy=False)
         data_frame = data_frame.reset_index()
         return data_frame
@@ -92,7 +94,7 @@ class MiddlewareArsenal:
         criterion = pd.concat(
             [origin_df[criteria_col] == 'SO0', origin_df[criteria_col] == 'SO4'], axis=1).any(axis=1)
         data_ins['data_frame'] = origin_df[criterion]
-        pivoted_df = MiddlewareArsenal.__pivot_daily_sales(data_ins)
+        pivoted_df = MiddlewareArsenal.__pivot_daily_sales(data_ins, st.MC_SALES_INTERVAL)
         data_ins['data_frame'] = pivoted_df
         data_ins['to_sql_df'] = to_sql_df
 
@@ -106,7 +108,7 @@ class MiddlewareArsenal:
         key_col = data_ins['doc_ref']['key_pos'][0]
         link_col = data_ins['doc_ref']['val_pos'][1]
         origin_df = origin_df[[key_col, link_col]]
-        pivoted_df = MiddlewareArsenal.__pivot_daily_sales(data_ins)
+        pivoted_df = MiddlewareArsenal.__pivot_daily_sales(data_ins, st.VIP_SALES_INTERVAL)
         df = pd.merge(pivoted_df, origin_df, how='left', on=key_col)
         df.drop_duplicates(subset=key_col, keep='first', inplace=True, ignore_index=True)
         data_ins['data_frame'] = df
@@ -266,10 +268,12 @@ class AssemblyLines:
             i = cls.tmj_atom['doc_ref']['val_pos'][-2]
             master[i] = master[i] * master[j]
             attr_dict = cls.__dict__
+            stock_validation = False
             for attribute in attr_dict:
                 if attr_dict[attribute] is None:
                     continue
                 if re.match(r'^.*_stock.*$', attribute):
+                    stock_validation = True
                     stock_data = attr_dict[attribute]
                     identity = stock_data['identity']
                     master_key = cls.tmj_combination['doc_ref']['val_pos'][2]
@@ -282,6 +286,8 @@ class AssemblyLines:
                         master, slave, how='left', left_on=master_key, right_on=slave_key, validate='many_to_one')
                     master.iloc[:, -1] = master.iloc[:, -1].fillna(value=0)
                     master.iloc[:, -1] = (master.iloc[:, -1] / master[j]).astype(np.int)
+            if stock_validation is False:
+                print('留意库存数据缺失!')
             return master
 
     class VipElementWiseSiteStatus:
@@ -308,7 +314,7 @@ class AssemblyLines:
                 slave_key = slave_data['doc_ref']['key_pos'][0]
                 master = pd.merge(
                     master, slave, how='left', left_on=master_key, right_on=slave_key, validate='many_to_one')
-            master.loc[:, slave_key:'week_sales'] = master.loc[:, slave_key:'week_sales'].fillna(0)
+            master.loc[:, slave_key:'agg_sales'] = master.loc[:, slave_key:'agg_sales'].fillna(0)
             return master
 
     class McElementWiseDailySales:
@@ -338,7 +344,7 @@ class AssemblyLines:
             master.iloc[:, -1] = master.iloc[:, -1] * master['数量']
             by_key = cls.tmj_combination['doc_ref']['val_pos'][2]
             master.sort_values(by=[by_key], axis=0, ignore_index=True, inplace=True)
-            master.iloc[:, -1] = master.groupby(by=[by_key]).week_sales.transform(np.sum)
+            master.iloc[:, -1] = master.groupby(by=[by_key]).agg_sales.transform(np.sum)
             master = master.loc[:, by_key:].iloc[:, [0, -1]]
             subset = master.columns[0]
             master.drop_duplicates(subset=subset, keep='first', inplace=True, ignore_index=True)
@@ -365,7 +371,7 @@ class AssemblyLines:
             tmj_atom_key = doc_ref['tmj_combination']['val_pos'][2]
             # -----------------------------------------------------------------------
             master = pd.merge(stock_inventory, mc_sales, how='left', on=tmj_atom_key, validate='many_to_one')
-            master.rename(columns={'week_sales': 'mc_week_sales'}, inplace=True)
+            master.rename(columns={'agg_sales': 'mc_agg_sales'}, inplace=True)
             i = doc_ref['vip_fundamental_collections']['key_pos'][1:].copy()
             i.extend(doc_ref['vip_fundamental_collections']['val_pos'])
             j = list(map(lambda xx: xx + '_suffix', i))
@@ -374,15 +380,15 @@ class AssemblyLines:
             master = master[master[doc_ref['vip_fundamental_collections']['val_pos'][3]] != '淘汰']
             # ---------------------------------------------------------
             group = master.groupby(by=[vip_stock_key, 'bp_criteria'])
-            master['platform'] = master['mc_week_sales']
+            master['platform'] = master['mc_agg_sales']
             master['platform'] = np.where(master['platform'].isna(), 0, 1)
             master['platform'] = group.platform.transform(np.sum)
             master['platform'] = np.where(master['platform'] == 0, '唯品', '共用')
-            master['week_sales'] = master['week_sales'].fillna(value=0)
-            master['mc_week_sales'] = master['mc_week_sales'].fillna(value=0)
+            master['agg_sales'] = master['agg_sales'].fillna(value=0)
+            master['mc_agg_sales'] = master['mc_agg_sales'].fillna(value=0)
             i = doc_ref['tmj_combination']['val_pos'][3]
-            master['mc_week_sales'] = master['mc_week_sales'] / master[i]
-            master['mc_week_sales'] = group.mc_week_sales.transform(np.max)
+            master['mc_agg_sales'] = master['mc_agg_sales'] / master[i]
+            master['mc_agg_sales'] = group.mc_agg_sales.transform(np.max)
             # -----------------------------------------------------------------------
             i = doc_ref['tmj_atom']['val_pos'][3]
             master[i] = group[i].transform(np.sum)
@@ -413,12 +419,12 @@ class AssemblyLines:
             master.dropna(subset=[doc_ref['tmj_atom']['val_pos'][0], ], inplace=True, axis=0)
             # i = stock_priorities[1][0]
             master['dsi'] = np.where(
-                master['week_sales'] == 0, np.floor(-1e-6 * master[i]), (master[i] / master['week_sales']) * 7
+                master['agg_sales'] == 0, np.floor(-1e-6 * master[i]), (master[i] / master['agg_sales']) * 7
             ).astype(np.int)
             site = doc_ref['vip_routine_site_stock']['val_pos'][0]
             master[site].fillna(value=0, inplace=True)
             master['dss'] = np.where(
-                master['week_sales'] == 0, np.floor(-1e-6 * master[site]), (master[site] / master['week_sales']) * 7
+                master['agg_sales'] == 0, np.floor(-1e-6 * master[site]), (master[site] / master['agg_sales']) * 7
             ).astype(np.int)
             i = stock_priorities[1][1]
             master.sort_values(by=i, ignore_index=True, inplace=True)
@@ -438,7 +444,7 @@ class AssemblyLines:
             # j = stock_priorities[1][1]
             # Days sales of inventory
             dsi = np.where(
-                master['week_sales'] == 0, np.ceil(1e-6 * master[i]) * 100, (master[i] / master['week_sales']) * 7
+                master['agg_sales'] == 0, np.ceil(1e-6 * master[i]) * 100, (master[i] / master['agg_sales']) * 7
             ).astype(np.int)
             # 触发备注提示的阈值, 低于此值会备注提示
             note_criteria = (dsi <= st.DSI_THRESHOLD) | (master[i] <= st.INVENTORY_THRESHOLD)
@@ -469,7 +475,7 @@ class AssemblyLines:
             # old_time = time.time()
             i = stock_priorities[1][1]
             dsi = np.where(
-                master['week_sales'] == 0, np.ceil(1e-6 * master[i]) * 100, (master[i] / master['week_sales']) * 7
+                master['agg_sales'] == 0, np.ceil(1e-6 * master[i]) * 100, (master[i] / master['agg_sales']) * 7
             ).astype(np.int)
             note_criteria = (dsi <= st.DSI_THRESHOLD) | (master[stock_priorities[1][1]] <= st.INVENTORY_THRESHOLD)
             bp_criteria = master.bp_criteria.astype(bool)

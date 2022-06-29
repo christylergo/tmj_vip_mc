@@ -8,9 +8,9 @@ import datetime
 # 表格生成后是否打开, True表示'是',False表示'否'
 SHOW_DOC_AFTER_GENERATED = True
 # 唯品销量显示的天数,1~30
-VIP_SALES_INTERVAL = 20
+VIP_SALES_INTERVAL = 28
 # 猫超销量的天数,1~30
-MC_SALES_INTERVAL = 20
+MC_SALES_INTERVAL = 7
 # 触发备注提示的周转天数阈值, 低于此值会备注提示
 DSI_THRESHOLD = 3
 # 触发备注提示的主仓库存阈值, 低于此值会备注提示
@@ -22,6 +22,8 @@ MAIN_NOTES_ONLY = True
 DOCS_PATH = 'vip_docs'
 # 代码文件夹路径
 CODE_PATH = 'tmj_vip_mc'
+# 生成文件后保存路径
+FILE_GENERATED_PATH = ''
 # 库存显示方面的设置
 warehouses = [
     'HanChuan', 'Vip', 'LingDing', 'YueZhong', 'LinDa', 'PiFa', 'KunShan', 'adjustment'
@@ -45,14 +47,14 @@ WAREHOUSE_PRIORITY = {
 FEATURE_PRIORITY = {
     'row_nu': [0, True],  # 序号
     'platform': [1, True],  # 在售平台
-    'mc_week_sales': [2, True],  # 猫超周销量
+    'mc_agg_sales': [2, True],  # 猫超汇总销量
     'status': [3, True],  # 上下架状态
     'vip_barcode': [4, True],  # 唯品条码
     'vip_commodity': [5, False],  # 唯品货号
     'vip_item_name': [6, True],  # 商品名称
     'tmj_barcode': [7, True],  # 旺店通货品条码明细
     'vip_category': [8, False],  # 唯品分类
-    'month_sales': [9, False],  # 月销量
+    'agg_sales': [9, True],  # 汇总销量
     'DSI': [10, True],  # 可用库存周转
     'site_DSI': [11, True],  # 页面库存周转
     'site_inventory': [12, True],  # 页面库存
@@ -101,11 +103,11 @@ for i in range(0, len(warehouses)):
 # 默认列宽7, 默认居中， 默认data_type string
 COLUMN_PROPERTY = [
     {'identity': 'row_nu', 'name': '序号',
-     'refer_doc': 'self', 'floating_title': 'index', 'width': 5},
+     'refer_doc': 'self', 'floating_title': 'index', 'width': 6},
     {'identity': 'platform', 'name': '在售平台', 'refer_doc': 'arrAtom',
      'floating_title': 'platform', 'width': 6},  # 1唯品，2猫超，3共用
     {'identity': 'status', 'name': '在架状态',
-     'refer_doc': 'vip_routine_operation', 'floating_title': '尺码状态'},
+     'refer_doc': 'vip_routine_operation', 'floating_title': '尺码状态', 'alignment': 'right'},
     {'identity': 'vip_barcode', 'name': '唯品条码', 'refer_doc': 'vip_fundamental_collections',
      'floating_title': '唯品后台条码', 'width': 15},
     {'identity': 'vip_commodity', 'name': '唯品货号', 'refer_doc': 'vip_fundamental_collections',
@@ -113,13 +115,13 @@ COLUMN_PROPERTY = [
     {'identity': 'vip_item_name', 'name': '商品名称', 'refer_doc': 'vip_fundamental_collections',
      'floating_title': '商品名称', 'width': 40, 'alignment': 'left', 'wrap_text': True},
     {'identity': 'tmj_barcode', 'name': '旺店通编码明细', 'refer_doc': 'arrAtom',
-     'floating_title': 'tmj_barcode', 'width': 19, 'alignment': 'left', 'wrap_text': True},
+     'floating_title': 'tmj_barcode', 'width': 19, 'alignment': 'left', 'wrap_text': True, 'bold': True},
     {'identity': 'vip_category', 'name': '类别',
      'refer_doc': 'vip_fundamental_collections', 'floating_title': '类别'},
-    {'identity': 'month_sales', 'name': '月销量',
-     'refer_doc': 'vip_daily_sales', 'floating_title': 'month_sales', 'data_type': 'int'},
-    {'identity': 'mc_week_sales', 'name': '猫超周销量',
-     'refer_doc': 'mc_daily_sales', 'floating_title': 'mc_week_sales', 'data_type': 'int'},
+    {'identity': 'agg_sales', 'name': '合计销量',
+     'refer_doc': 'vip_daily_sales', 'floating_title': 'agg_sales', 'data_type': 'int'},
+    {'identity': 'mc_agg_sales', 'name': '猫超销量',
+     'refer_doc': 'mc_daily_sales', 'floating_title': 'mc_agg_sales', 'data_type': 'int'},
     {'identity': 'site_DSI', 'name': '页面库存周转',
      'refer_doc': 'self', 'floating_title': 'dss', 'data_type': 'int'},
     {'identity': 'DSI', 'name': '可用库存周转',
@@ -164,7 +166,7 @@ COLUMN_PROPERTY.extend(vip_daily_sales_columns)
 
 doc_stock = [{
     'identity': warehouses[i].lower() + '_stock', 'name': warehouses_key_name[i] + '仓',
-    'key_words': '|'.join([xx .join(['^[^虚拟].*', '[^虚拟]*库存.*$']) for xx in warehouses_key_name[i].split('|')]),
+    'key_words': '|'.join([xx .join(['^[^虚拟]*.*', '[^虚拟]*仓库存.*$']) for xx in warehouses_key_name[i].split('|')]),
     'key_pos': ['商家编码', ],
     'val_pos': ['残次品', '可发库存', '可用库存'],
     'val_type': ['TEXT', 'INT', 'INT'],
@@ -262,6 +264,6 @@ DOCS_PATH = os.path.join(desktop, DOCS_PATH)
 # 代码文件夹路径
 CODE_PATH = os.path.join(desktop, CODE_PATH)
 # 生成表格路径
-FILE_GENERATED_PATH = os.path.join(DOCS_PATH, 'path_via_pandas.xlsx')
+FILE_GENERATED_PATH = os.path.join(desktop, 'path_via_pandas.xlsx')
 # sys.path.append(CODE_PATH)
 

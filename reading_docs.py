@@ -53,6 +53,7 @@ class DocumentIO(threading.Thread):
                 i = {
                     'identity': None,
                     'file_name': str(file),
+                    'base_name': os.path.basename(str(file)),
                     'file_mtime': file.stat().st_mtime,
                     'file_mtime_in_sqlite': None,
                     'read_doc': True,
@@ -63,7 +64,7 @@ class DocumentIO(threading.Thread):
     @classmethod
     def check_files_list(cls) -> list:
         cls.get_files_list()
-        files = str.join(',', [file['file_name'] for file in cls.files])
+        files = str.join(',', [file['base_name'] for file in cls.files])
         for doc in st.DOC_REFERENCE:
             existence = re.search(doc['key_words'], files)
             if existence is None:
@@ -75,7 +76,7 @@ class DocumentIO(threading.Thread):
                 else:
                     pass  # optional文件不存在时不需要提醒
             for file in cls.files:
-                matched = re.search(doc['key_words'], file['file_name'])
+                matched = re.search(doc['key_words'], file['base_name'])
                 if matched is not None:
                     file['identity'] = doc['identity']
                     cls.thread_num += 1
@@ -84,12 +85,12 @@ class DocumentIO(threading.Thread):
         conn = sqlite.connect(cls.sql_db)
         cursor = conn.cursor()
         cursor_data = cursor.execute(
-            "SELECT identity, file_name, file_mtime FROM tmj_files_info;")
+            "SELECT identity, base_name, file_mtime FROM tmj_files_info;")
         # print(files_list)
         for row in cursor_data:  # 把查询到的sqlite中的文件更新时间放入files_list中,后续对比会用到
             for file in cls.files:
                 # print(file)
-                if file['file_name'] == row[1]:
+                if file['base_name'] == row[1]:
                     file['file_mtime_in_sqlite'] = row[2]
                     if file['file_mtime'] == row[2]:
                         file['read_doc'] = False
@@ -116,6 +117,7 @@ class DocumentIO(threading.Thread):
         read_doc = False
         for file in self.files:  # files是类属性,全部文件夹中的文件信息列表
             if file['identity'] == self.identity:
+                # file name 是完整的带有路径的文件名, 可以用于读取, base name是不带路径的文件名
                 file_name.append(file['file_name'])
                 read_doc = read_doc or file['read_doc']
         if not read_doc:
@@ -155,7 +157,9 @@ class DocumentIO(threading.Thread):
         pd_cols.extend(x)
         sql_constraint = ''
         if self.from_sql == 'merge':
-            sales_date_head = datetime.date.today() - datetime.timedelta(days=st.VIP_SALES_INTERVAL)
+            interval = {'vip_daily_sales': st.VIP_SALES_INTERVAL,
+                        'mc_daily_sales': st.MC_SALES_INTERVAL}
+            sales_date_head = datetime.date.today() - datetime.timedelta(days=interval[self.doc_ref['identity']])
             # vip和mc日销文件的date列名不同
             sql_constraint = f" WHERE DATE({self.doc_ref['key_pos'][1]}) >= '{sales_date_head}';"
         self.mutex.acquire()
@@ -238,17 +242,19 @@ class DocumentIO(threading.Thread):
                     to_sql['to_sql_df'].to_sql(
                         to_sql['identity'], conn, if_exists='append', index=False, chunksize=1000)
                 # 写入sqlite的文件更新信息, 避免出现线程执行失败, 但是文件信息却更新了的情况
-                for file in cls.files:
-                    if file['identity'] == to_sql['identity']:
-                        query_data.append(
-                            (file['identity'], file['file_name'], file['file_mtime']))
-                        # 把最新的文件信息写进sqlite中,用于下一次比对,旧信息全部删除.
-                        cursor.execute(
-                            f"DELETE FROM tmj_files_info WHERE identity = '{file['identity']}';")
-                print('have written data to sqlite ...')
+                print(f"{to_sql['identity']} have written data to sqlite ...")
+            for file in cls.files:
+                if file['identity'] == to_sql['identity']:
+                    query_data.append(
+                        (file['identity'], file['base_name'], file['file_mtime']))
+                    # 把最新的文件信息写进sqlite中,用于下一次比对,旧信息全部删除.
+                    cursor.execute(
+                        f"DELETE FROM tmj_files_info WHERE identity = '{file['identity']}';")
+
         #  --------------------------------
+        # base name 是不带路径的文件名
         cursor.executemany(
-            "INSERT INTO tmj_files_info(identity, file_name, file_mtime) VALUES(?,?,?);", query_data)
+            "INSERT INTO tmj_files_info(identity, base_name, file_mtime) VALUES(?,?,?);", query_data)
         conn.commit()
         cursor.close()
         conn.close()

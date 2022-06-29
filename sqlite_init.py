@@ -5,11 +5,12 @@ import settings as st
 
 sql_db = 'tmj_sqlite.db'
 sql_db = os.path.join(st.CODE_PATH, sql_db)
+# base_name 是os.path.basename()对应的不带路径的文件名
 sql_create_tmj_files_info = '''
     CREATE TABLE IF NOT EXISTS tmj_files_info
     (ID INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
     identity TEXT  NOT NULL,
-    file_name TEXT UNIQUE NOT NULL,
+    base_name TEXT UNIQUE NOT NULL,
     file_mtime DATETIME NOT NULL);
 '''
 sql_create_table = [f"""
