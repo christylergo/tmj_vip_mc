@@ -10,7 +10,7 @@ SHOW_DOC_AFTER_GENERATED = True
 # 唯品销量显示的天数,1~30
 VIP_SALES_INTERVAL = 28
 # 猫超销量的天数,1~30
-MC_SALES_INTERVAL = 7
+MC_SALES_INTERVAL = 1
 # 触发备注提示的周转天数阈值, 低于此值会备注提示
 DSI_THRESHOLD = 3
 # 触发备注提示的主仓库存阈值, 低于此值会备注提示
@@ -128,8 +128,8 @@ COLUMN_PROPERTY = [
      'refer_doc': 'self', 'floating_title': 'dsi', 'data_type': 'int'},
     {'identity': 'site_inventory', 'name': '页面库存余量',
      'refer_doc': 'vip_routine_site_stock', 'floating_title': '可扣库存', 'data_type': 'int'},
-    {'identity': 'disassemble', 'name': '组合分解',
-     'refer_doc': 'self', 'floating_title': 'disassemble'},
+    {'identity': 'disassemble', 'name': '需求',
+     'refer_doc': 'self', 'floating_title': 'disassemble', 'data_type': 'int'},
     {'identity': 'cost', 'name': '成本',
      'refer_doc': 'tmj_atom', 'floating_title': '会员价', 'data_type': 'float'},
     {'identity': 'weight', 'name': '重量',
@@ -240,7 +240,7 @@ DOC_REFERENCE = [
     },
     {
         'identity': 'vip_summary', 'name': '',  # 生成的统计最终表,当需要分解组合的时候读取.
-        'key_words': '唯品库存统计分析', 'key_pos': ['唯品条码'], 'val_pos': ['组合分解'], 'val_type': ['INT'],
+        'key_words': '唯品库存统计分析', 'key_pos': ['唯品条码'], 'val_pos': ['需求'], 'val_type': ['INT'],
         'importance': 'optional', 'mode': None,
     },
 ]
@@ -266,4 +266,5 @@ CODE_PATH = os.path.join(desktop, CODE_PATH)
 # 生成表格路径
 FILE_GENERATED_PATH = os.path.join(desktop, 'path_via_pandas.xlsx')
 # sys.path.append(CODE_PATH)
+CPUS = os.cpu_count()
 

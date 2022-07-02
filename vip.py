@@ -1,4 +1,6 @@
 # -*- coding:utf-8 -*-
+import re
+import sys
 import time
 import styles
 import reading_docs as rds
@@ -6,7 +8,9 @@ from middleware import middleware_arsenal
 from middleware import assembly_lines
 
 if __name__ == '__main__':
-    raw_data = rds.multiprocessing_reader()
+    args = sys.argv
+    args = [0, '-dpxl', '-15']
+    raw_data = rds.multiprocessing_reader(args)
     old_time = time.time()
     # 对已读取的dataframe进行预处理
     for data_struct in raw_data:
@@ -29,10 +33,10 @@ if __name__ == '__main__':
     vip_notes = assembly_lines['VipNotes']
     # vip_notes.subassembly = assembled_data  # 这个方式的赋值操作会无效, 暂不能理解, 所以使用setattr方法
     setattr(vip_notes, 'subassembly', assembled_data)
-    noted_data['vip_notes'] = vip_notes.assemble()
+    noted_data['vip_notes'] = vip_notes.assemble(args)
     noted_data['master'] = data_dict['vip_fundamental_collections']['data_frame']
     final_assembly = assembly_lines['FinalAssembly']
     setattr(final_assembly, 'subassembly', noted_data)
-    final_assembled_data = final_assembly.assemble()
+    final_assembled_data = final_assembly.assemble(args)
     styles.add_styles(final_assembled_data)
 

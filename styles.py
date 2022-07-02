@@ -18,7 +18,7 @@ def add_styles(dataframe):
     wb = Workbook()
     ws = wb.active
     ws.title = 'VipInventory'
-    multi_column = dataframe.columns
+    multi_column = dataframe[0].columns
     # ------------------------------------
     columns = ['序号']
     d_type = ['int']
@@ -76,7 +76,7 @@ def add_styles(dataframe):
     cell = chr(a_upper + columns_size % 26)
     if columns_size // 26 > 0:
         cell = chr(a_upper + columns_size // 26 - 1) + cell
-    ws.auto_filter.ref = 'A1:' + cell + str(dataframe.index.size+1)
+    ws.auto_filter.ref = 'A1:' + cell + str(dataframe[0].index.size+1)
     ws.freeze_panes = freeze_panes[0]
     # column = 'A:B,E:H'
     # ws.range(column).column_width = width[ii]
@@ -96,9 +96,20 @@ def add_data(dataframe, file_path):
     app = xw.App(visible=visible, add_book=False)
     wb = app.books.open(file_path)
     ws = wb.sheets[0]
-    df = dataframe.copy()
+    df = dataframe[0]
     df = df.droplevel(level=[1, 2, 3], axis=1)
-    ws.range('A1').value = df
+    ws.range('A1').value = df if dataframe[2] is None else dataframe[2]
+    sheet1 = ws.name
+    if dataframe[1] is not None:
+        df = dataframe[1]
+        df.rename(columns={'platform': '在售平台'}, inplace=True)
+        df.index = range(1, df.index.size + 1)
+        df.index.name = '序号'
+        ws = wb.sheets.add(name='单品销量', after=sheet1)
+        ws.range('B:E').number_format = '@'
+        ws.range('A:A').number_format = '0'
+        ws.range('F:F').number_format = '0'
+        ws.range('A1').value = df
     wb.save()
     if visible:
         # 通过xlwings app获取窗口句柄, 再使用win32接口最大化 最小化是: SW_SHOWMINIMIZED

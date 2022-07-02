@@ -16,8 +16,6 @@ import sqlite3 as sqlite
 import settings as st
 import sqlite_init
 
-CPUS = os.cpu_count()
-
 
 class DocumentIO(threading.Thread):
     """
@@ -41,10 +39,14 @@ class DocumentIO(threading.Thread):
         cls.thread_counter += 1
 
     @classmethod
-    def get_files_list(cls) -> None:
+    def get_files_list(cls, arg) -> None:
         files = Path(st.DOCS_PATH)
+        files_ins = list(files.glob('*'))
+        if arg & (os.path.dirname(st.FILE_GENERATED_PATH) != st.DOCS_PATH):
+            files = Path(os.path.dirname(st.FILE_GENERATED_PATH))
+            files_ins.extend(list(files.glob(os.path.basename(st.FILE_GENERATED_PATH))))
         files_list = []
-        for file_dir in files.glob('*'):
+        for file_dir in files_ins:
             if os.path.isdir(file_dir):
                 file_dir = Path(file_dir).glob('*')
             else:
@@ -62,8 +64,8 @@ class DocumentIO(threading.Thread):
         cls.files = files_list
 
     @classmethod
-    def check_files_list(cls) -> list:
-        cls.get_files_list()
+    def check_files_list(cls, arg) -> list:
+        cls.get_files_list(arg)
         files = str.join(',', [file['base_name'] for file in cls.files])
         for doc in st.DOC_REFERENCE:
             existence = re.search(doc['key_words'], files)
@@ -100,8 +102,9 @@ class DocumentIO(threading.Thread):
         cls.mutex.release()
         return cls.files
 
-    def __init__(self, doc_reference: dict):
+    def __init__(self, doc_reference, arg):
         super().__init__()
+        self.switch = False
         self.identity = doc_reference['identity']
         self.doc_ref = doc_reference
         self.file = None  # 准备读取的文件名称列表
@@ -109,7 +112,7 @@ class DocumentIO(threading.Thread):
         self.to_sql = False
         self.to_sql_df = None  # pandas.DataFrame if not None
         if self.files is None:  # 类属性
-            self.files = self.check_files_list()
+            self.files = self.check_files_list(arg)
         self.check_file()
 
     def check_file(self) -> None:
@@ -117,8 +120,10 @@ class DocumentIO(threading.Thread):
         read_doc = False
         for file in self.files:  # files是类属性,全部文件夹中的文件信息列表
             if file['identity'] == self.identity:
+                self.switch = True
                 # file name 是完整的带有路径的文件名, 可以用于读取, base name是不带路径的文件名
-                file_name.append(file['file_name'])
+                if file['read_doc'] is True:
+                    file_name.append(file['file_name'])
                 read_doc = read_doc or file['read_doc']
         if not read_doc:
             self.from_sql = 'substitute'  # 是否从sqlite读取的最终依据是文件是否更新过
@@ -200,9 +205,7 @@ class DocumentIO(threading.Thread):
         old_time = time.time()
         tracing = f"reading_thread: {self.thread_counter} ({self.identity})is initialized! \r\n" + \
                   f"mode: {self.from_sql}   start at: {time.ctime()} ^_^\r\n"
-        if self.file is None:
-            print(f"{self.identity}'s initialization is dispensable!")
-        else:
+        if self.switch:
             old_time = time.time()
             data_frame = self.get_data()
             # print('get_data耗时: ', time.time()-old_time)
@@ -216,6 +219,8 @@ class DocumentIO(threading.Thread):
             # self.to_sqlite()
             tracing = tracing + f'get it done at: {time.ctime()}  total cost: {time.time() - old_time}\r\n'
             print(tracing)
+        else:
+            print(f"{self.identity}'s initialization is dispensable!")
 
     @classmethod
     def update_to_sqlite(cls, list_ins: list) -> None:
@@ -241,8 +246,8 @@ class DocumentIO(threading.Thread):
                     cursor.execute(sql_query)
                     to_sql['to_sql_df'].to_sql(
                         to_sql['identity'], conn, if_exists='append', index=False, chunksize=1000)
-                # 写入sqlite的文件更新信息, 避免出现线程执行失败, 但是文件信息却更新了的情况
                 print(f"{to_sql['identity']} have written data to sqlite ...")
+            # 写入sqlite的文件更新信息, 避免出现线程执行失败, 但是文件信息却更新了的情况
             for file in cls.files:
                 if file['identity'] == to_sql['identity']:
                     query_data.append(
@@ -263,13 +268,13 @@ class DocumentIO(threading.Thread):
 # ----------------------------------分隔线, 之后是功能函数---------------------------------------
 
 
-def reading_worker(process_queue=None, doc_refer=None, /) -> None:
+def reading_worker(process_queue=None, doc_refer=None, arg=False, /) -> None:
     if doc_refer is None:
         doc_refer = st.DOC_REFERENCE
     rds_ins = []
     for xx in doc_refer:
-        temp = DocumentIO(xx)
-        if temp.file is not None:
+        temp = DocumentIO(xx, arg)
+        if temp.switch:
             rds_ins.append(temp)
             temp.start()
     for ins in rds_ins:
@@ -279,14 +284,15 @@ def reading_worker(process_queue=None, doc_refer=None, /) -> None:
         process_queue.put(data_ins)
 
 
-def multiprocessing_reader() -> list:
+def multiprocessing_reader(args) -> list:
     """
     返回值是字典列表
     {'identity': identity, 'doc_ref': doc_reference, 'data_frame': dataframe, 'to_sql_df': dataframe, 'mode': substitute/merge/None}
     :return:
     """
-    global CPUS
-    files_list = DocumentIO.check_files_list()
+    cpus = st.CPUS
+    arg = True if len(args) == 2 and re.match(r'^-+dpxl$', args[1]) else False
+    files_list = DocumentIO.check_files_list(arg)
     doc_reference = []
     sql_reference = []
     for doc in st.DOC_REFERENCE:
@@ -305,15 +311,13 @@ def multiprocessing_reader() -> list:
     len_doc = len(doc_reference)
     if len_doc > 1:
         print('multiprocessing is initialized.')
-        if CPUS < (len_doc + 1) // 2:
-            cpus = CPUS
-        else:
+        if cpus >= (len_doc + 1) // 2:
             cpus = (len_doc + 1) // 2
         pool = multiprocessing.Pool(cpus)
         queue_ins = multiprocessing.Manager().Queue()
         for i in range(len_doc // 2):  # 每2个文档读取需求开启一个进程
             doc_group = [doc_reference[i * 2], doc_reference[i * 2 + 1]]
-            pool.apply_async(reading_worker, (queue_ins, doc_group))
+            pool.apply_async(reading_worker, (queue_ins, doc_group, arg))
             # print(doc_group)
         doc_group = sql_reference  # 把需要从sqlite中读取的需求也加进最后一个进程
         if len_doc % 2 == 1:
@@ -323,7 +327,7 @@ def multiprocessing_reader() -> list:
         pool.join()
     else:
         queue_ins = queue.Queue()
-        reading_worker(queue_ins)  # 将数据放入便于读取的queue中
+        reading_worker(queue_ins, None, arg)  # 将数据放入便于读取的queue中
     data_ins_list = []
     while not queue_ins.empty():
         data_ins = queue_ins.get()

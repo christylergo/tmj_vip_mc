@@ -79,7 +79,7 @@ class MiddlewareArsenal:
         data_frame = data_frame.applymap(func=abs)
         data_frame.columns = data_frame.columns.map(lambda xx: f"{pd.to_datetime(xx):%m/%d}")
         # 注意df的切片方式, 两端都是闭区间, python的切片左闭右开
-        slicer = -INTERVAL-1
+        slicer = -INTERVAL - 1
         data_frame['agg_sales'] = data_frame.iloc[:, -1:slicer:-1].apply(np.sum, axis=1)
         data_frame.astype(np.int, copy=False)
         data_frame = data_frame.reset_index()
@@ -340,6 +340,8 @@ class AssemblyLines:
             slave = cls.mc_daily_sales['data_frame']
             slave_key = cls.mc_daily_sales['doc_ref']['key_pos'][0]
             master = pd.merge(master, slave, how='left', left_on=master_key, right_on=slave_key)
+            if slave.empty:
+                master['agg_sales'] = 0
             master.iloc[:, -1] = master.iloc[:, -1].fillna(value=0)
             master.iloc[:, -1] = master.iloc[:, -1] * master['数量']
             by_key = cls.tmj_combination['doc_ref']['val_pos'][2]
@@ -356,28 +358,37 @@ class AssemblyLines:
         group by以及str.join, 是个耗时操作, 操作对象是前几步整合的dataframe
         """
         subassembly = None
+        doc_ref = {xx['identity']: xx for xx in st.DOC_REFERENCE}
+        vip_site_key = doc_ref['vip_fundamental_collections']['key_pos'][0]
+        vip_stock_key = doc_ref['vip_fundamental_collections']['key_pos'][1]
+        tmj_atom_key = doc_ref['tmj_combination']['val_pos'][2]
+        tmj_atom_coefficient = doc_ref['tmj_combination']['val_pos'][3]
 
         @classmethod
-        def assemble(cls):
-            if cls.subassembly is None:
-                return None
-            old_time = time.time()
-            doc_ref = {xx['identity']: xx for xx in st.DOC_REFERENCE}
+        def basics_assembly(cls, args):
+            doc_ref = cls.doc_ref
             stock_inventory = cls.subassembly['VipElementWiseStockInventory']
             site_status = cls.subassembly['VipElementWiseSiteStatus']
             mc_sales = cls.subassembly['McElementWiseDailySales']
-            vip_site_key = doc_ref['vip_fundamental_collections']['key_pos'][0]
-            vip_stock_key = doc_ref['vip_fundamental_collections']['key_pos'][1]
-            tmj_atom_key = doc_ref['tmj_combination']['val_pos'][2]
+            vip_site_key = cls.vip_site_key
+            vip_stock_key = cls.vip_stock_key
+            tmj_atom_key = cls.tmj_atom_key
+            if (len(args) > 2) and re.match(r'^-+\d+$', args[2]):
+                interval = int(args[2].strip('-'))
+            else:
+                interval = st.VIP_SALES_INTERVAL
             # -----------------------------------------------------------------------
             master = pd.merge(stock_inventory, mc_sales, how='left', on=tmj_atom_key, validate='many_to_one')
             master.rename(columns={'agg_sales': 'mc_agg_sales'}, inplace=True)
             i = doc_ref['vip_fundamental_collections']['key_pos'][1:].copy()
             i.extend(doc_ref['vip_fundamental_collections']['val_pos'])
-            j = list(map(lambda xx: xx + '_suffix', i))
+            j = list(map(lambda uu: uu + '_suffix', i))
             master.rename(columns=dict(zip(i, j)), inplace=True)
             master = pd.merge(site_status, master, how='left', on=vip_site_key)
             master = master[master[doc_ref['vip_fundamental_collections']['val_pos'][3]] != '淘汰']
+            # drop nan 能比较好地解决后续操作中遇到的无效值问题.
+            master[doc_ref['tmj_atom']['val_pos'][2]].fillna(value='*', inplace=True)
+            master.dropna(subset=[doc_ref['tmj_atom']['val_pos'][0], ], inplace=True, axis=0)
             # ---------------------------------------------------------
             group = master.groupby(by=[vip_stock_key, 'bp_criteria'])
             master['platform'] = master['mc_agg_sales']
@@ -394,8 +405,6 @@ class AssemblyLines:
             master[i] = group[i].transform(np.sum)
             i = doc_ref['tmj_atom']['val_pos'][4]
             master[i] = group[i].transform(np.sum)
-
-            # -----------------------------------------------------------------------
             stock_priorities = []
             for xx in st.doc_stock_real_and_virtual:
                 if xx['identity'] in master.columns.to_list():
@@ -404,33 +413,14 @@ class AssemblyLines:
                     m = i + '_notes'
                     k = st.FEATURE_PRIORITY[i][0]
                     stock_priorities.append((i, j, m, k))
-            stock_priorities.sort(key=lambda xx: xx[3])
+            stock_priorities.sort(key=lambda yy: yy[3])
             # 把adjustment值加到优先级最高的实体仓库存里
-            i = stock_priorities[1][0]
-            j = stock_priorities[0][0]
-            master[i] += master[j]
+            master[stock_priorities[1][0]] += master[stock_priorities[0][0]]
             # 把备注列移到紧靠主仓列之后
             st.FEATURE_PRIORITY['annotation'][0] = stock_priorities[1][3] + 1
             for k in stock_priorities:
                 master[k[1]] = master[k[0]]
                 master[k[0]] = group[k[0]].transform(np.min)
-            # drop nan 能比较好地解决后续操作中遇到的无效值问题.
-            master[doc_ref['tmj_atom']['val_pos'][2]].fillna(value='*', inplace=True)
-            master.dropna(subset=[doc_ref['tmj_atom']['val_pos'][0], ], inplace=True, axis=0)
-            # i = stock_priorities[1][0]
-            master['dsi'] = np.where(
-                master['agg_sales'] == 0, np.floor(-1e-6 * master[i]), (master[i] / master['agg_sales']) * 7
-            ).astype(np.int)
-            site = doc_ref['vip_routine_site_stock']['val_pos'][0]
-            master[site].fillna(value=0, inplace=True)
-            master['dss'] = np.where(
-                master['agg_sales'] == 0, np.floor(-1e-6 * master[site]), (master[site] / master['agg_sales']) * 7
-            ).astype(np.int)
-            i = stock_priorities[1][1]
-            master.sort_values(by=i, ignore_index=True, inplace=True)
-            master.sort_values(by='bp_criteria', kind='mergesort', ignore_index=True, inplace=True)
-            group = master.groupby(by=[vip_stock_key, 'bp_criteria'])
-            bp_group = master.groupby(by=[vip_stock_key, 'bp_mapping'])
             i = doc_ref['tmj_combination']['val_pos'][2]
             j = doc_ref['tmj_combination']['val_pos'][3]
             master['tmj_barcode'] = ''
@@ -440,11 +430,50 @@ class AssemblyLines:
                 shadow > 1, master.loc[:, (i, j)].apply('*'.join, axis=1), master.loc[:, i])
             master.loc[:, j] = master.loc[:, j].astype(np.int)
             master.loc[:, 'tmj_barcode'] = group.tmj_barcode.transform('# '.join)
+            # days sales of inventory column
             i = stock_priorities[1][0]
-            # j = stock_priorities[1][1]
-            # Days sales of inventory
+            master['dsi'] = np.where(
+                master['agg_sales'] == 0, np.floor(-1e-6 * master[i]),
+                (master[i] / master['agg_sales']) * interval).astype(np.int)
+            # days sales of site inventory column
+            site = doc_ref['vip_routine_site_stock']['val_pos'][0]
+            master[site].fillna(value=0, inplace=True)
+            master['dss'] = np.where(
+                master['agg_sales'] == 0, np.floor(-1e-6 * master[site]),
+                (master[site] / master['agg_sales']) * interval).astype(np.int)
+            # -------------------------------------------------------------------
+            # 增加单品汇总销量, 以及单品维度的库存周转
+            master['atom_wise_sales'] = master['agg_sales'] * master[j]
+            group = master.groupby(by=tmj_atom_key)
+            master['atom_wise_sales'] = group.atom_wise_sales.transform(np.sum)
+            # -------------------------------------------------------------------
+            return master, stock_priorities
+
+        @classmethod
+        def assemble(cls, args=None):
+            if cls.subassembly is None:
+                return None
+            old_time = time.time()
+            doc_ref = cls.doc_ref
+            vip_site_key = cls.vip_site_key
+            vip_stock_key = cls.vip_stock_key
+            tmj_atom_key = cls.tmj_atom_key
+            tmj_atom_coefficient = cls.tmj_atom_coefficient
+            if (len(args) > 2) and re.match(r'^-+\d+$', args[2]):
+                interval = int(args[2].strip('-'))
+            else:
+                interval = st.VIP_SALES_INTERVAL
+            master, stock_priorities = AssemblyLines.VipNotes.basics_assembly()
+            group = master.groupby(by=[vip_stock_key, 'bp_criteria'])
+            # ---------------------------------------------------------------
+            i = stock_priorities[1][1]
+            master.sort_values(by=i, ignore_index=True, inplace=True)
+            master.sort_values(by='bp_criteria', kind='mergesort', ignore_index=True, inplace=True)
+            group = master.groupby(by=[vip_stock_key, 'bp_criteria'])
+            bp_group = master.groupby(by=[vip_stock_key, 'bp_mapping'])
+            i = stock_priorities[1][0]
             dsi = np.where(
-                master['agg_sales'] == 0, np.ceil(1e-6 * master[i]) * 100, (master[i] / master['agg_sales']) * 7
+                master['agg_sales'] == 0, np.ceil(1e-6 * master[i]) * 100, (master[i] / master['agg_sales']) * interval
             ).astype(np.int)
             # 触发备注提示的阈值, 低于此值会备注提示
             note_criteria = (dsi <= st.DSI_THRESHOLD) | (master[i] <= st.INVENTORY_THRESHOLD)
@@ -453,7 +482,7 @@ class AssemblyLines:
             criteria = note_criteria & ~bp_criteria
             note_criteria = group.bp_criteria.transform(len) > 1
             criteria = criteria & note_criteria
-            notes_view = master.loc[criteria, :]
+            notes_view = master.loc[criteria, :].copy()
             nv_group = notes_view.groupby(by=vip_stock_key)
             limit = 2 if st.MAIN_NOTES_ONLY else len(stock_priorities)
             for k in range(1, limit):
@@ -475,7 +504,7 @@ class AssemblyLines:
             # old_time = time.time()
             i = stock_priorities[1][1]
             dsi = np.where(
-                master['agg_sales'] == 0, np.ceil(1e-6 * master[i]) * 100, (master[i] / master['agg_sales']) * 7
+                master['agg_sales'] == 0, np.ceil(1e-6 * master[i]) * 100, (master[i] / master['agg_sales']) * interval
             ).astype(np.int)
             note_criteria = (dsi <= st.DSI_THRESHOLD) | (master[stock_priorities[1][1]] <= st.INVENTORY_THRESHOLD)
             bp_criteria = master.bp_criteria.astype(bool)
@@ -485,7 +514,7 @@ class AssemblyLines:
             criteria = note_criteria | bp_criteria
             master['criteria'] = criteria
             criteria = bp_group.criteria.transform(np.all)
-            notes_view = master.loc[criteria, :].fillna('')
+            notes_view = master.loc[criteria, :].fillna('').copy()
             nv_group = notes_view.groupby(by=[vip_stock_key, 'bp_mapping'])
             # 消除已知的weak warning, 已经按照warning内容进行了优化
             with warnings.catch_warnings(record=True):
@@ -500,9 +529,9 @@ class AssemblyLines:
                 notes_view.loc[:, m] = nv_group[m].transform('替代款:'.join)
             master['bp_notes'] = ''
             master.loc[criteria, 'bp_notes'] = notes_view[m]
-            master.loc[:, 'bp_notes'] = group.bp_notes.transform(' '.join)
+            master.loc[criteria, 'bp_notes'] = group.bp_notes.transform(';'.join)
             master.loc[:, 'notes'].fillna(value='', inplace=True)
-            master.loc[:, 'notes'] = master.loc[:, ['notes', 'bp_notes']].apply(' '.join, axis=1)
+            master.loc[criteria, 'notes'] = master.loc[criteria, ['notes', 'bp_notes']].apply('; '.join, axis=1)
             # bp_criteria列的值本来就是True/False, 但是直接取反的结果会和预期严重不符, 需要先强制标定数据类型
             i = ~(master.bp_criteria.astype(bool))
             master = master.loc[i, :]
@@ -511,12 +540,50 @@ class AssemblyLines:
 
     class FinalAssembly:
         subassembly = None
+        vip_summary = None
+        doc_ref = {xx['identity']: xx for xx in st.DOC_REFERENCE}
 
         @classmethod
-        def assemble(cls):
+        def disassemble(cls, args):
+            doc_ref = cls.doc_ref
+            df = cls.subassembly['vip_notes'].copy()
+            i = doc_ref['vip_fundamental_collections']['key_pos'][0]
+            j = doc_ref['vip_fundamental_collections']['key_pos'][1]
+            df.drop_duplicates(subset=[i, j], keep='first', ignore_index=True, inplace=True)
+            vip_summary = None
+            if len(args) == 2 and doc_ref['vip_summary']['val_pos'][0] in cls.vip_summary.columns.to_list():
+                vip_summary = cls.vip_summary.drop_duplicates(subset=i, keep='first', ignore_index=True, inplace=False)
+                df = pd.merge(vip_summary, df, how='inner', on=i)
+                df.fillna(value=0, inplace=True)
+            elif (len(args) >= 2) and re.match(r'^-+\d+$', args[2]):
+                j = doc_ref['vip_summary']['val_pos'][0]
+                df[j] = df['agg_sales']
+                df.fillna(value=0, inplace=True)
+            else:
+                return None
+            i = doc_ref['tmj_combination']['val_pos'][3]
+            j = doc_ref['vip_summary']['val_pos'][0]
+            df.loc[:, j] = df[i] * df[j]
+            df.loc[:, j] = df.groupby(doc_ref['tmj_atom']['key_pos'][0])[j].transform(np.sum)
+            i = doc_ref['vip_fundamental_collections']['key_pos'][1]
+            df.drop_duplicates(subset=[i], keep='first', ignore_index=True, inplace=True)
+            columns_list = ['platform']
+            columns_list.extend([doc_ref['tmj_combination']['val_pos'][2]])
+            columns_list.extend(doc_ref['tmj_atom']['val_pos'][:3])
+            columns_list.append(j)
+            df = df.reindex(columns=columns_list)
+            df.index.name = '序号'
+            return df, vip_summary
+
+        @classmethod
+        def assemble(cls, args=None):
             if cls.subassembly is None:
                 return None
             doc_ref = {xx['identity']: xx for xx in st.DOC_REFERENCE}
+            disassemble_df = None
+            vip_summary = None
+            if len(args) >= 2 and re.match(r'^-+dpxl$', args[1]):
+                disassemble_df, vip_summary = AssemblyLines.FinalAssembly.disassemble(args)
             master = cls.subassembly['master']
             vip_notes = cls.subassembly['vip_notes']
             i = doc_ref['vip_fundamental_collections']['key_pos'][0]
@@ -529,6 +596,9 @@ class AssemblyLines:
             master = pd.merge(master, slave, how='inner', on=[i, j], validate='many_to_one')
             i = doc_ref['vip_fundamental_collections']['val_pos'][3]
             master = master.loc[master[i] != '淘汰', :]
+            if disassemble_df is not None:
+                i = doc_ref['vip_summary']['val_pos'][0]
+                master['disassemble'] = master['agg_sales']
             # -----------------------------------------------------------------------
             old_time = time.time()
             master_columns = master.columns.to_list()
@@ -560,7 +630,7 @@ class AssemblyLines:
             master.index = range(1, master.index.size + 1)
             # raw_data.index.name = '序号'
             master.index.name = '序号'
-            return master
+            return master, disassemble_df, vip_summary
 
 
 for x in st.doc_stock_real_and_virtual:
