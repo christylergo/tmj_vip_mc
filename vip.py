@@ -13,7 +13,7 @@ if __name__ == '__main__':
         if re.match(r'^-+dpxl$', args[1]) is None:
             print('***参数拼写错误!***')
             sys.exit()
-        if len(args) == 3:
+        if len(args) >= 3:
             if re.match(r'^-+\d+$', args[2]) is None:
                 print('***参数拼写错误!***')
                 sys.exit()

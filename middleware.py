@@ -567,6 +567,7 @@ class AssemblyLines:
                 vip_summary = cls.vip_summary['data_frame']
                 if doc_ref['vip_summary']['val_pos'][0] in vip_summary.columns.to_list():
                     criteria = True
+                    vip_summary = vip_summary.fillna(0)
                 else:
                     vip_summary = None
             if criteria:
