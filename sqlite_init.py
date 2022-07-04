@@ -30,7 +30,7 @@ for create_table in sql_create_table:
     cur.execute(create_table)
 
 # 手工处理的query写在此处
-# cur.execute('drop table vip_bench_player;')
+# cur.execute('drop table vip_summary;')
 # cur = cur.execute("select * from vip_routine_site_stock where id<'10';")
 # for i in cur:
 #     print(i)

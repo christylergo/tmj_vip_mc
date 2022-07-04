@@ -9,15 +9,25 @@ from middleware import assembly_lines
 
 if __name__ == '__main__':
     args = sys.argv
-    args = [0, '-dpxl', '-15']
+    if len(args) >= 2:
+        if re.match(r'^-+dpxl$', args[1]) is None:
+            print('***参数拼写错误!***')
+            sys.exit()
+        if len(args) == 3:
+            if re.match(r'^-+\d+$', args[2]) is None:
+                print('***参数拼写错误!***')
+                sys.exit()
+            if int(args[2].strip('-')) >30:
+                print('***日期跨度不能超过30!***')
+                sys.exit()
     raw_data = rds.multiprocessing_reader(args)
     old_time = time.time()
     # 对已读取的dataframe进行预处理
-    for data_struct in raw_data:
-        identity = data_struct['identity']
+    for data in raw_data:
+        identity = data['identity']
         # 避免可能会出现KeyError. try except是最差的方式, 会掩盖其他类型的error
-        preprocess_func = middleware_arsenal.get(identity, lambda data_ins: data_ins)
-        preprocess_func(data_ins=data_struct)  # partial对象需要传递key argument
+        preprocess_func = middleware_arsenal.get(identity, lambda data_ins, args: data_ins)
+        preprocess_func(data_ins=data, args=args)  # partial对象需要传递key argument
     processed_data = raw_data
     rds.DocumentIO.update_to_sqlite(processed_data)  # 最后更新文件信息,避免干扰读取
     # ---------------------------------------------------------

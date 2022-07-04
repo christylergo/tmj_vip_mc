@@ -21,9 +21,9 @@ class MiddlewareArsenal:
     """
 
     @staticmethod
-    def __rectify_daily_sales(data_ins, INTERVAL=30):
+    def __rectify_daily_sales(data_ins, interval=30):
         # 这个日期格式的针对性操作应该放进middleware里, 之前放在reading_docs里
-        sales_date_head = datetime.date.today() - datetime.timedelta(days=INTERVAL)
+        sales_date_head = datetime.date.today() - datetime.timedelta(days=interval)
         sales_date_tail = datetime.date.today()
         date_col = data_ins['doc_ref']['key_pos'][1]
         data_frame = data_ins['data_frame']
@@ -62,14 +62,14 @@ class MiddlewareArsenal:
 
     # --------------------------------------------------
     @staticmethod
-    def __pivot_daily_sales(data_ins, INTERVAL):
+    def __pivot_daily_sales(data_ins, interval):
         key_col = data_ins['doc_ref']['key_pos'][0]
         date_col = data_ins['doc_ref']['key_pos'][1]
         sales_col = data_ins['doc_ref']['val_pos'][0]
         data_frame = data_ins['data_frame'].copy()
         today = time.mktime(datetime.date.today().timetuple())
         today = datetime.datetime.fromtimestamp(today)
-        sales_date_head = today - datetime.timedelta(days=INTERVAL)
+        sales_date_head = today - datetime.timedelta(days=interval)
         data_frame = data_frame.loc[lambda df: pd.to_datetime(df[date_col]) >= sales_date_head, :]
         if data_frame.empty:
             return data_frame
@@ -79,36 +79,41 @@ class MiddlewareArsenal:
         data_frame = data_frame.applymap(func=abs)
         data_frame.columns = data_frame.columns.map(lambda xx: f"{pd.to_datetime(xx):%m/%d}")
         # 注意df的切片方式, 两端都是闭区间, python的切片左闭右开
-        slicer = -INTERVAL - 1
+        slicer = -interval - 1
         data_frame['agg_sales'] = data_frame.iloc[:, -1:slicer:-1].apply(np.sum, axis=1)
         data_frame.astype(np.int, copy=False)
         data_frame = data_frame.reset_index()
         return data_frame
 
     # ---------------------------------------------
-    def mc_daily_sales(self, data_ins) -> None:
+    def mc_daily_sales(self, data_ins, args=None) -> None:
         while self is not None:
             print('eliminate the weak warnings')
+        interval = st.MC_SALES_INTERVAL
         origin_df, to_sql_df = MiddlewareArsenal.__rectify_daily_sales(data_ins)
         criteria_col = data_ins['doc_ref']['key_pos'][2]
         criterion = pd.concat(
             [origin_df[criteria_col] == 'SO0', origin_df[criteria_col] == 'SO4'], axis=1).any(axis=1)
         data_ins['data_frame'] = origin_df[criterion]
-        pivoted_df = MiddlewareArsenal.__pivot_daily_sales(data_ins, st.MC_SALES_INTERVAL)
+        pivoted_df = MiddlewareArsenal.__pivot_daily_sales(data_ins, interval)
         data_ins['data_frame'] = pivoted_df
         data_ins['to_sql_df'] = to_sql_df
 
     # ------------------------------------------------
-    def vip_daily_sales(self, data_ins) -> None:
+    def vip_daily_sales(self, data_ins, args=None) -> None:
         while self is not None:
             print('eliminate the weak warnings')
         # -----------------------------------------
+        if (len(args) > 2) and re.match(r'^-+\d+$', args[2]):
+            interval = int(args[2].strip('-'))
+        else:
+            interval = st.VIP_SALES_INTERVAL
         origin_df, to_sql_df = MiddlewareArsenal.__rectify_daily_sales(data_ins)
         old_time = time.time()
         key_col = data_ins['doc_ref']['key_pos'][0]
         link_col = data_ins['doc_ref']['val_pos'][1]
         origin_df = origin_df[[key_col, link_col]]
-        pivoted_df = MiddlewareArsenal.__pivot_daily_sales(data_ins, st.VIP_SALES_INTERVAL)
+        pivoted_df = MiddlewareArsenal.__pivot_daily_sales(data_ins, interval)
         df = pd.merge(pivoted_df, origin_df, how='left', on=key_col)
         df.drop_duplicates(subset=key_col, keep='first', inplace=True, ignore_index=True)
         data_ins['data_frame'] = df
@@ -116,7 +121,7 @@ class MiddlewareArsenal:
         # print('left join 耗时: ', time.time() - old_time)
 
     # --------------------------------------------------
-    def tmj_combination(self, data_ins):
+    def tmj_combination(self, data_ins, args=None):
         """
         添加辅助构建bench player货品与主货品映射关系的列
         """
@@ -127,7 +132,7 @@ class MiddlewareArsenal:
         data_ins['data_frame'] = df
 
     # --------------------------------------------------
-    def vip_routine_site_stock(self, data_ins) -> None:
+    def vip_routine_site_stock(self, data_ins, args=None) -> None:
         """
         剔除val_pos列中的无效值, 目前是"-"
         """
@@ -147,7 +152,7 @@ class MiddlewareArsenal:
         data_ins['data_frame'] = df
 
     # 这样首尾单下划线的名称结构可以避免和内部属性雷同造成混淆
-    def _warehouse_stock_(self, data_ins) -> None:
+    def _warehouse_stock_(self, data_ins, args=None) -> None:
         while self is not None:
             print('eliminate the weak warnings')
         criteria_col = data_ins['doc_ref']['val_pos'][0]
@@ -365,7 +370,7 @@ class AssemblyLines:
         tmj_atom_coefficient = doc_ref['tmj_combination']['val_pos'][3]
 
         @classmethod
-        def basics_assembly(cls, args):
+        def basics_assembly(cls, args=None):
             doc_ref = cls.doc_ref
             stock_inventory = cls.subassembly['VipElementWiseStockInventory']
             site_status = cls.subassembly['VipElementWiseSiteStatus']
@@ -373,7 +378,8 @@ class AssemblyLines:
             vip_site_key = cls.vip_site_key
             vip_stock_key = cls.vip_stock_key
             tmj_atom_key = cls.tmj_atom_key
-            if (len(args) > 2) and re.match(r'^-+\d+$', args[2]):
+            tmj_atom_coefficient = cls.tmj_atom_coefficient
+            if len(args) > 2:
                 interval = int(args[2].strip('-'))
             else:
                 interval = st.VIP_SALES_INTERVAL
@@ -422,7 +428,7 @@ class AssemblyLines:
                 master[k[1]] = master[k[0]]
                 master[k[0]] = group[k[0]].transform(np.min)
             i = doc_ref['tmj_combination']['val_pos'][2]
-            j = doc_ref['tmj_combination']['val_pos'][3]
+            j = tmj_atom_coefficient
             master['tmj_barcode'] = ''
             shadow = master.loc[:, j]
             master.loc[:, j] = master.loc[:, j].astype(np.int).astype(str)
@@ -459,11 +465,11 @@ class AssemblyLines:
             vip_stock_key = cls.vip_stock_key
             tmj_atom_key = cls.tmj_atom_key
             tmj_atom_coefficient = cls.tmj_atom_coefficient
-            if (len(args) > 2) and re.match(r'^-+\d+$', args[2]):
+            if len(args) > 2:
                 interval = int(args[2].strip('-'))
             else:
                 interval = st.VIP_SALES_INTERVAL
-            master, stock_priorities = AssemblyLines.VipNotes.basics_assembly()
+            master, stock_priorities = AssemblyLines.VipNotes.basics_assembly(args)
             group = master.groupby(by=[vip_stock_key, 'bp_criteria'])
             # ---------------------------------------------------------------
             i = stock_priorities[1][1]
@@ -508,12 +514,13 @@ class AssemblyLines:
             ).astype(np.int)
             note_criteria = (dsi <= st.DSI_THRESHOLD) | (master[stock_priorities[1][1]] <= st.INVENTORY_THRESHOLD)
             bp_criteria = master.bp_criteria.astype(bool)
-            note_criteria = note_criteria & ~bp_criteria & bp_group.bp_criteria.transform(np.any)
+            note_criteria = (note_criteria & ~bp_criteria) & bp_group.bp_criteria.transform(np.any)
             bp_criteria = (dsi > st.DSI_THRESHOLD) | (master[stock_priorities[1][1]] > st.INVENTORY_THRESHOLD)
             bp_criteria = bp_criteria & master.bp_criteria
             criteria = note_criteria | bp_criteria
             master['criteria'] = criteria
             criteria = bp_group.criteria.transform(np.all)
+            master['criteria'] = criteria
             notes_view = master.loc[criteria, :].fillna('').copy()
             nv_group = notes_view.groupby(by=[vip_stock_key, 'bp_mapping'])
             # 消除已知的weak warning, 已经按照warning内容进行了优化
@@ -529,9 +536,13 @@ class AssemblyLines:
                 notes_view.loc[:, m] = nv_group[m].transform('替代款:'.join)
             master['bp_notes'] = ''
             master.loc[criteria, 'bp_notes'] = notes_view[m]
-            master.loc[criteria, 'bp_notes'] = group.bp_notes.transform(';'.join)
+            master.loc[:, 'bp_notes'] = group.bp_notes.transform(';'.join)
+            # 此处主要是用好正则匹配
+            master.loc[:, 'bp_notes'] = master.loc[:, 'bp_notes'].replace(
+                regex=r'^;+$|(?<=[^;];);+(?=[^;].+)|(?<=[^;]);*$', value='')
             master.loc[:, 'notes'].fillna(value='', inplace=True)
-            master.loc[criteria, 'notes'] = master.loc[criteria, ['notes', 'bp_notes']].apply('; '.join, axis=1)
+            master.loc[criteria, 'notes'] = master.loc[criteria, ['notes', 'bp_notes']].apply(';-*-'.join, axis=1)
+            master.loc[criteria, 'notes'] = master.loc[criteria, 'notes'].replace(regex=r'^;-\*-(?=[^;])', value='')
             # bp_criteria列的值本来就是True/False, 但是直接取反的结果会和预期严重不符, 需要先强制标定数据类型
             i = ~(master.bp_criteria.astype(bool))
             master = master.loc[i, :]
@@ -550,21 +561,30 @@ class AssemblyLines:
             i = doc_ref['vip_fundamental_collections']['key_pos'][0]
             j = doc_ref['vip_fundamental_collections']['key_pos'][1]
             df.drop_duplicates(subset=[i, j], keep='first', ignore_index=True, inplace=True)
+            criteria = False
             vip_summary = None
-            if len(args) == 2 and doc_ref['vip_summary']['val_pos'][0] in cls.vip_summary.columns.to_list():
-                vip_summary = cls.vip_summary.drop_duplicates(subset=i, keep='first', ignore_index=True, inplace=False)
-                df = pd.merge(vip_summary, df, how='inner', on=i)
+            if len(args) == 2 and cls.vip_summary is not None:
+                vip_summary = cls.vip_summary['data_frame']
+                if doc_ref['vip_summary']['val_pos'][0] in vip_summary.columns.to_list():
+                    criteria = True
+                else:
+                    vip_summary = None
+            if criteria:
+                i = doc_ref['vip_summary']['key_pos'][0]
+                j = doc_ref['vip_fundamental_collections']['key_pos'][0]
+                vip_summary = vip_summary.drop_duplicates(subset=i, keep='first', ignore_index=True, inplace=False)
+                df = pd.merge(vip_summary, df, how='inner', left_on=i, right_on=j)
                 df.fillna(value=0, inplace=True)
-            elif (len(args) >= 2) and re.match(r'^-+\d+$', args[2]):
+                i = doc_ref['tmj_combination']['val_pos'][3]
                 j = doc_ref['vip_summary']['val_pos'][0]
-                df[j] = df['agg_sales']
+                df.loc[:, j] = df[i] * df[j]
+                df.loc[:, j] = df.groupby(doc_ref['tmj_atom']['key_pos'][0])[j].transform(np.sum)
+            elif len(args) >= 2:
+                j = doc_ref['vip_summary']['val_pos'][0]
+                df[j] = df['atom_wise_sales']
                 df.fillna(value=0, inplace=True)
             else:
                 return None
-            i = doc_ref['tmj_combination']['val_pos'][3]
-            j = doc_ref['vip_summary']['val_pos'][0]
-            df.loc[:, j] = df[i] * df[j]
-            df.loc[:, j] = df.groupby(doc_ref['tmj_atom']['key_pos'][0])[j].transform(np.sum)
             i = doc_ref['vip_fundamental_collections']['key_pos'][1]
             df.drop_duplicates(subset=[i], keep='first', ignore_index=True, inplace=True)
             columns_list = ['platform']
@@ -597,8 +617,14 @@ class AssemblyLines:
             i = doc_ref['vip_fundamental_collections']['val_pos'][3]
             master = master.loc[master[i] != '淘汰', :]
             if disassemble_df is not None:
-                i = doc_ref['vip_summary']['val_pos'][0]
-                master['disassemble'] = master['agg_sales']
+                if vip_summary is None:
+                    master['disassemble'] = master['agg_sales']
+                else:
+                    i = doc_ref['vip_fundamental_collections']['key_pos'][0]
+                    j = doc_ref['vip_summary']['key_pos'][0]
+                    master = pd.merge(master, vip_summary, how='inner', left_on=i, right_on=j, validate='many_to_one')
+                    i = doc_ref['vip_summary']['val_pos'][0]
+                    master['disassemble'] = master[i]
             # -----------------------------------------------------------------------
             old_time = time.time()
             master_columns = master.columns.to_list()
@@ -630,7 +656,7 @@ class AssemblyLines:
             master.index = range(1, master.index.size + 1)
             # raw_data.index.name = '序号'
             master.index.name = '序号'
-            return master, disassemble_df, vip_summary
+            return master, disassemble_df
 
 
 for x in st.doc_stock_real_and_virtual:

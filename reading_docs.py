@@ -290,7 +290,7 @@ def multiprocessing_reader(args) -> list:
     {'identity': identity, 'doc_ref': doc_reference, 'data_frame': dataframe, 'to_sql_df': dataframe, 'mode': substitute/merge/None}
     :return:
     """
-    cpus = st.CPUS
+    cpus = os.cpu_count()
     arg = True if len(args) == 2 and re.match(r'^-+dpxl$', args[1]) else False
     files_list = DocumentIO.check_files_list(arg)
     doc_reference = []

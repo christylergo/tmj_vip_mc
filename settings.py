@@ -129,13 +129,13 @@ COLUMN_PROPERTY = [
     {'identity': 'site_inventory', 'name': '页面库存余量',
      'refer_doc': 'vip_routine_site_stock', 'floating_title': '可扣库存', 'data_type': 'int'},
     {'identity': 'disassemble', 'name': '需求',
-     'refer_doc': 'self', 'floating_title': 'disassemble', 'data_type': 'int'},
+     'refer_doc': 'vip_summary', 'floating_title': 'disassemble', 'data_type': 'int', 'bold': True},
     {'identity': 'cost', 'name': '成本',
      'refer_doc': 'tmj_atom', 'floating_title': '会员价', 'data_type': 'float'},
     {'identity': 'weight', 'name': '重量',
      'refer_doc': 'tmj_atom', 'floating_title': '重量', 'data_type': 'float'},
     {'identity': 'annotation', 'name': '备注', 'refer_doc': 'arrAtom',
-     'floating_title': 'notes', 'width': 15, 'alignment': 'left', 'wrap_text': True},
+     'floating_title': 'notes', 'width': 15, 'alignment': 'left', 'wrap_text': False},
     {'identity': 'site_link', 'name': '商品链接',
      'refer_doc': 'vip_daily_sales', 'floating_title': '商品链接', 'width': 10, 'alignment': 'left'},
 ]
@@ -240,7 +240,7 @@ DOC_REFERENCE = [
     },
     {
         'identity': 'vip_summary', 'name': '',  # 生成的统计最终表,当需要分解组合的时候读取.
-        'key_words': '唯品库存统计分析', 'key_pos': ['唯品条码'], 'val_pos': ['需求'], 'val_type': ['INT'],
+        'key_words': 'path_via_pandas', 'key_pos': ['唯品条码'], 'val_pos': ['需求'], 'val_type': ['INT'],
         'importance': 'optional', 'mode': None,
     },
 ]
@@ -266,5 +266,4 @@ CODE_PATH = os.path.join(desktop, CODE_PATH)
 # 生成表格路径
 FILE_GENERATED_PATH = os.path.join(desktop, 'path_via_pandas.xlsx')
 # sys.path.append(CODE_PATH)
-CPUS = os.cpu_count()
 

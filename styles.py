@@ -98,7 +98,7 @@ def add_data(dataframe, file_path):
     ws = wb.sheets[0]
     df = dataframe[0]
     df = df.droplevel(level=[1, 2, 3], axis=1)
-    ws.range('A1').value = df if dataframe[2] is None else dataframe[2]
+    ws.range('A1').value = df
     sheet1 = ws.name
     if dataframe[1] is not None:
         df = dataframe[1]
