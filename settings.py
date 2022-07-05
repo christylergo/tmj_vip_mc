@@ -67,7 +67,12 @@ FEATURE_PRIORITY = {
     # 按天显示最近一周的销量,注意此处是字典生成式(iterable)
     'DAILY_SALES_WEEK': [19, True],
 }
-
+args = sys.argv
+if len(args) >= 3:
+    import re
+    if re.match(r'^-+\d+$', args[2]):
+        VIP_SALES_INTERVAL = int(args[2].strip('-'))
+        
 for value in FEATURE_PRIORITY.values():
     value[0] *= 100
 
@@ -257,7 +262,6 @@ def get_desktop() -> str:
         win32con.HKEY_CURRENT_USER, r'Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders', 0,
         win32con.KEY_READ)
     return win32api.RegQueryValueEx(desktop_key, 'Desktop')[0]
-
 
 desktop = get_desktop()
 DOCS_PATH = os.path.join(desktop, DOCS_PATH)

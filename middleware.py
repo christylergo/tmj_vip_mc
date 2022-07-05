@@ -86,7 +86,7 @@ class MiddlewareArsenal:
         return data_frame
 
     # ---------------------------------------------
-    def mc_daily_sales(self, data_ins, args=None) -> None:
+    def mc_daily_sales(self, data_ins) -> None:
         while self is not None:
             print('eliminate the weak warnings')
         interval = st.MC_SALES_INTERVAL
@@ -100,14 +100,11 @@ class MiddlewareArsenal:
         data_ins['to_sql_df'] = to_sql_df
 
     # ------------------------------------------------
-    def vip_daily_sales(self, data_ins, args=None) -> None:
+    def vip_daily_sales(self, data_ins) -> None:
         while self is not None:
             print('eliminate the weak warnings')
         # -----------------------------------------
-        if (len(args) > 2) and re.match(r'^-+\d+$', args[2]):
-            interval = int(args[2].strip('-'))
-        else:
-            interval = st.VIP_SALES_INTERVAL
+        interval = st.VIP_SALES_INTERVAL
         origin_df, to_sql_df = MiddlewareArsenal.__rectify_daily_sales(data_ins)
         old_time = time.time()
         key_col = data_ins['doc_ref']['key_pos'][0]
@@ -121,7 +118,7 @@ class MiddlewareArsenal:
         # print('left join 耗时: ', time.time() - old_time)
 
     # --------------------------------------------------
-    def tmj_combination(self, data_ins, args=None):
+    def tmj_combination(self, data_ins):
         """
         添加辅助构建bench player货品与主货品映射关系的列
         """
@@ -132,7 +129,7 @@ class MiddlewareArsenal:
         data_ins['data_frame'] = df
 
     # --------------------------------------------------
-    def vip_routine_site_stock(self, data_ins, args=None) -> None:
+    def vip_routine_site_stock(self, data_ins) -> None:
         """
         剔除val_pos列中的无效值, 目前是"-"
         """
@@ -152,7 +149,7 @@ class MiddlewareArsenal:
         data_ins['data_frame'] = df
 
     # 这样首尾单下划线的名称结构可以避免和内部属性雷同造成混淆
-    def _warehouse_stock_(self, data_ins, args=None) -> None:
+    def _warehouse_stock_(self, data_ins) -> None:
         while self is not None:
             print('eliminate the weak warnings')
         criteria_col = data_ins['doc_ref']['val_pos'][0]
