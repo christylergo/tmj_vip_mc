@@ -42,7 +42,7 @@ class DocumentIO(threading.Thread):
     def get_files_list(cls, arg) -> None:
         files = Path(st.DOCS_PATH)
         files_ins = list(files.glob('*'))
-        if arg & (os.path.dirname(st.FILE_GENERATED_PATH) != st.DOCS_PATH):
+        if arg and (os.path.dirname(st.FILE_GENERATED_PATH) != st.DOCS_PATH):
             files = Path(os.path.dirname(st.FILE_GENERATED_PATH))
             files_ins.extend(list(files.glob(os.path.basename(st.FILE_GENERATED_PATH))))
         files_list = []
@@ -127,7 +127,7 @@ class DocumentIO(threading.Thread):
                 read_doc = read_doc or file['read_doc']
         if not read_doc:
             self.from_sql = 'substitute'  # 是否从sqlite读取的最终依据是文件是否更新过
-        if len(file_name) > 0:
+        if self.switch:
             self.file = file_name
             self.count_threads()  # 存在文件就会开启线程进行读取, thread_counter加1
 
