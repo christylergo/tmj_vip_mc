@@ -161,12 +161,12 @@ class DocumentIO(threading.Thread):
         x = self.doc_ref['val_pos'].copy()  # 避免list出现异常,需要使用copy方法
         pd_cols.extend(x)
         sql_constraint = ''
-        if self.from_sql == 'merge':
+        if self.identity in ['vip_daily_sales', 'mc_daily_sales']:
             interval = {'vip_daily_sales': st.VIP_SALES_INTERVAL,
                         'mc_daily_sales': st.MC_SALES_INTERVAL}
-            sales_date_head = datetime.date.today() - datetime.timedelta(days=interval[self.doc_ref['identity']])
+            sales_date_head = datetime.date.today() - datetime.timedelta(days=interval[self.identity])
             # vip和mc日销文件的date列名不同
-            sql_constraint = f" WHERE DATE({self.doc_ref['key_pos'][1]}) >= '{sales_date_head}';"
+            sql_constraint = f" WHERE {self.doc_ref['key_pos'][1]} >= '{sales_date_head}';"
         self.mutex.acquire()
         conn = sqlite.connect(self.sql_db)
         # sqlite是单线程,不能线程共用一个conn

@@ -1,3 +1,4 @@
+# -*- coding:utf-8 -*-
 import os
 import sqlite3
 
@@ -20,6 +21,9 @@ sql_create_table = [f"""
     {str.join(',', [vp + ' ' + vt for vp, vt in zip(d_rf['val_pos'], d_rf['val_type'])])});"""
                     for d_rf in st.DOC_REFERENCE]
 # sql_create_table = [re.sub(r'日期\s+TEXT', '日期 DATETIME', content) for content in sql_create_table]
+sql_create_index = [f"CREATE INDEX IF NOT EXISTS index_{d_rf['identity']} ON {d_rf['identity']}({d_rf['key_pos'][1]});"
+                    for d_rf in st.DOC_REFERENCE if d_rf['identity'] in ['mc_daily_sales', 'vip_daily_sales']]
+sql_create_table.extend(sql_create_index)
 sql_create_table.append(sql_create_tmj_files_info)
 table_list = [item['identity'] for item in st.DOC_REFERENCE]
 table_list.append('tmj_files_info')
@@ -44,6 +48,5 @@ for create_table in sql_create_table:
 #         cc += 1
 conn.commit()
 conn.close()
-
 
 print('sqlite_init->tracing...')

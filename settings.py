@@ -8,9 +8,9 @@ import datetime
 # 表格生成后是否打开, True表示'是',False表示'否'
 SHOW_DOC_AFTER_GENERATED = True
 # 唯品销量显示的天数,1~30
-VIP_SALES_INTERVAL = 28
+VIP_SALES_INTERVAL = 8
 # 猫超销量的天数,1~30
-MC_SALES_INTERVAL = 1
+MC_SALES_INTERVAL = 5
 # 触发备注提示的周转天数阈值, 低于此值会备注提示
 DSI_THRESHOLD = 3
 # 触发备注提示的主仓库存阈值, 低于此值会备注提示
